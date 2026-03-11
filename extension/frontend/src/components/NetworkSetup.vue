@@ -10,15 +10,16 @@ const emit = defineEmits<{
 const {
   networks: apiNetworks,
   connectionStatus: apiConnectionStatus,
+  serialNumber: apiSerialNumber,
+  hotspotSsid: apiHotspotSsid,
   scanning,
   fetchNetworks,
   scanNetworks,
   connectToNetwork,
 } = useWifiNetworks()
 
-const dorisSerialNumber = 'D-2847-AQ'
-const dorisMACAddress = computed(() => apiConnectionStatus.value?.mac_address ?? 'A4:CF:12:8B:3E:D1')
-const dorisHotspotName = `DORIS_${dorisSerialNumber}`
+const dorisMACAddress = computed(() => apiConnectionStatus.value?.mac_address ?? '—')
+const dorisHotspotName = computed(() => apiHotspotSsid.value ?? 'DORIS')
 
 const showAdvanced = ref(true)
 const selectedNetwork = ref<DisplayNetwork | null>(null)
@@ -133,7 +134,7 @@ const manualConnectDisabled = () => {
         <div class="space-y-1">
           <div class="flex items-center justify-between">
             <span class="text-sm" style="color: #96EEF2">Serial Number:</span>
-            <span class="text-sm font-mono text-white">{{ dorisSerialNumber }}</span>
+            <span class="text-sm font-mono text-white">{{ apiSerialNumber ?? '—' }}</span>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm" style="color: #96EEF2">MAC Address:</span>

@@ -94,6 +94,8 @@ export interface NetworkFullInfo {
   connection: ConnectionStatus
   available_networks: WifiNetwork[]
   is_scanning: boolean
+  serial_number: string | null
+  hotspot_ssid: string | null
 }
 
 export interface MissionSummary {
@@ -340,6 +342,8 @@ export function useSensors() {
 export function useWifiNetworks() {
   const networks = ref<WifiNetwork[]>([])
   const connectionStatus = ref<ConnectionStatus | null>(null)
+  const serialNumber = ref<string | null>(null)
+  const hotspotSsid = ref<string | null>(null)
   const loading = ref(false)
   const scanning = ref(false)
   const error = ref<string | null>(null)
@@ -351,6 +355,8 @@ export function useWifiNetworks() {
       const info = await fetchApi<NetworkFullInfo>('/network')
       networks.value = info.available_networks
       connectionStatus.value = info.connection
+      serialNumber.value = info.serial_number
+      hotspotSsid.value = info.hotspot_ssid
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to fetch networks'
     } finally {
@@ -420,6 +426,8 @@ export function useWifiNetworks() {
   return {
     networks: readonly(networks),
     connectionStatus: readonly(connectionStatus),
+    serialNumber: readonly(serialNumber),
+    hotspotSsid: readonly(hotspotSsid),
     loading: readonly(loading),
     scanning: readonly(scanning),
     error: readonly(error),
