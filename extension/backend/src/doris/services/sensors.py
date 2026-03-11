@@ -49,50 +49,28 @@ class SensorService:
         return modules
 
     async def get_sensor_readings(self, sensor_id: str) -> list[SensorReading]:
-        """Get recent readings from a sensor."""
-        try:
-            # Try to get sensor data from ping service
-            data = await self.ping_service.get(f"/v1.0/sensors/{sensor_id}/data")
+        """Get recent readings from a sensor.
 
-            readings = []
-            for reading in data.get("readings", []):
-                readings.append(
-                    SensorReading(
-                        sensor_id=sensor_id,
-                        sensor_name=data.get("name", sensor_id),
-                        value=reading.get("value", 0),
-                        unit=reading.get("unit", ""),
-                        timestamp=datetime.fromisoformat(reading.get("timestamp")),
-                        quality=reading.get("quality", 1.0),
-                    )
-                )
-            return readings
-        except Exception:
-            # Return mock readings
-            return [
-                SensorReading(
-                    sensor_id=sensor_id,
-                    sensor_name="CTD Sensor",
-                    value=25.4,
-                    unit="°C",
-                    timestamp=datetime.now(),
-                    quality=0.98,
-                )
-            ]
+        The Ping Service API does not expose per-sensor reading history,
+        so this returns an empty list.
+        """
+        return []
 
     async def configure_sensor(self, config: SensorConfig) -> bool:
-        """Update sensor configuration."""
+        """Update sensor configuration via POST /v1.0/sensors."""
         try:
-            await self.ping_service.put(
-                f"/v1.0/sensors/{config.sensor_id}/config",
+            await self.ping_service.post(
+                "/v1.0/sensors",
                 json={
+                    "sensor_id": config.sensor_id,
                     "sample_rate": config.sample_rate,
                     "enabled": config.enabled,
                     "calibration_file": config.calibration_file,
                 },
             )
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to configure sensor {config.sensor_id}: {e}")
             return False
 
     async def get_video_streams(self) -> list[VideoStream]:
@@ -167,28 +145,35 @@ class SensorService:
         return None
 
     async def _get_ping_modules(self) -> list[ModuleInfo]:
-        """Get ping/sonar sensor modules."""
-        modules = []
+        """Get ping/sonar sensor modules from GET /v1.0/sensors."""
+        modules: list[ModuleInfo] = []
         try:
-            devices = await self.ping_service.get("/v1.0/devices")
+            devices: list[dict[str, Any]] = await self.ping_service.get(  # type: ignore[assignment]
+                "/v1.0/sensors"
+            )
 
             for device in devices:
-                is_connected = device.get("connected", False)
+                device_id = device.get("device_id", 0)
+                ping_type = device.get("ping_type", "Ping")
+                fw_major = device.get("firmware_version_major", 0)
+                fw_minor = device.get("firmware_version_minor", 0)
+                fw_patch = device.get("firmware_version_patch", 0)
+                firmware = f"{fw_major}.{fw_minor}.{fw_patch}"
+                port = device.get("port", "")
+
                 modules.append(
                     ModuleInfo(
-                        id=device.get("id", "ping-1"),
-                        name=device.get("name", "Ping Sensor"),
+                        id=f"ping-{device_id}",
+                        name=f"{ping_type} ({port})" if port else ping_type,
                         type="sensor",
-                        status="connected" if is_connected else "disconnected",
-                        module_status="Ready: Active" if is_connected else "Disconnected",
-                        power_usage=device.get("power_usage", 50.0),
-                        sample_rate=device.get("sample_rate", 1.0),
-                        firmware_version=device.get("firmware_version"),
-                        last_reading=datetime.now().isoformat() if is_connected else None,
+                        status="connected",
+                        module_status="Ready: Active",
+                        firmware_version=firmware,
+                        last_reading=datetime.now().isoformat(),
                     )
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to get ping sensors: {e}")
         return modules
 
     async def _get_light_module(self) -> ModuleInfo | None:
