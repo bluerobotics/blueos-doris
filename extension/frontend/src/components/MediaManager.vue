@@ -3,10 +3,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   Download, FolderOpen, Image as ImageIcon, Video, FileText, Search,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, AlertTriangle, Play,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Loader2, AlertCircle
 } from 'lucide-vue-next'
 import { useMedia, useStorage } from '../composables/useApi'
-import type { MediaFile as ApiMediaFile } from '../composables/useApi'
 import type { Screen } from '../types'
 
 interface DisplayFile {
@@ -24,8 +23,8 @@ const emit = defineEmits<{
   navigate: [screen: Screen, diveData?: { name: string; date: string; duration: string; maxDepth: string; location: string }]
 }>()
 
-const { files: apiFiles, fetchFiles, deleteFile } = useMedia()
-const { storage, fetchStorage } = useStorage()
+const { files: apiFiles, loading: mediaLoading, error: mediaError, fetchFiles, deleteFile } = useMedia()
+const { storage, loading: storageLoading, error: storageError, fetchStorage } = useStorage()
 
 type SortField = 'diveName' | 'fileName' | 'date' | 'type'
 type SortDirection = 'asc' | 'desc' | null
@@ -40,6 +39,7 @@ const itemsPerPage = ref(10)
 const showEraseAllConfirm = ref(false)
 const eraseAllStep = ref<1 | 2>(1)
 const isDeleting = ref(false)
+const initialLoadDone = ref(false)
 
 function formatFileSize(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
@@ -56,7 +56,7 @@ function mapMediaType(mediaType: string): 'video' | 'image' | 'sensor' | 'log' {
 }
 
 const mediaFiles = computed<DisplayFile[]>(() => {
-  return apiFiles.value.map((f: ApiMediaFile) => {
+  return apiFiles.value.map((f) => {
     const createdDate = new Date(f.created_at)
     return {
       id: f.id,
@@ -71,16 +71,21 @@ const mediaFiles = computed<DisplayFile[]>(() => {
   })
 })
 
-const storageTotalGb = computed(() => storage.value?.total_gb ?? 500)
-const storageAvailableGb = computed(() => storage.value?.available_gb ?? 275)
-const storageAvailablePercent = computed(() => storageTotalGb.value > 0 ? Math.round((storageAvailableGb.value / storageTotalGb.value) * 100) : 0)
+const storageTotalGb = computed(() => storage.value?.total_gb ?? 0)
+const storageAvailableGb = computed(() => storage.value?.available_gb ?? 0)
+const storageUsedPercent = computed(() => storage.value?.used_percent ?? 0)
+const storageAvailablePercent = computed(() => storageTotalGb.value > 0 ? Math.round(100 - storageUsedPercent.value) : 0)
+const hasStorageData = computed(() => storage.value !== null)
 
 let pollInterval: number | undefined
 
-onMounted(() => {
-  fetchFiles()
-  fetchStorage()
-  pollInterval = setInterval(fetchFiles, 15000) as unknown as number
+onMounted(async () => {
+  await Promise.all([fetchFiles(), fetchStorage()])
+  initialLoadDone.value = true
+  pollInterval = setInterval(() => {
+    fetchFiles()
+    fetchStorage()
+  }, 15000) as unknown as number
 })
 
 onUnmounted(() => {
@@ -222,22 +227,55 @@ const handlePageChange = (page: number) => {
         </h1>
       </div>
 
+      <!-- Error Banner -->
+      <div
+        v-if="mediaError || storageError"
+        class="rounded-lg p-3 md:p-4 mb-4 md:mb-6 flex items-start gap-3"
+        style="background-color: rgba(221, 44, 29, 0.15); border: 1px solid rgba(221, 44, 29, 0.4)"
+      >
+        <AlertCircle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+        <div>
+          <p class="text-sm font-semibold" style="color: #DD2C1D">Unable to fetch data from the system</p>
+          <p v-if="mediaError" class="text-xs mt-1" style="color: #FF6B6B">Files: {{ mediaError }}</p>
+          <p v-if="storageError" class="text-xs mt-1" style="color: #FF6B6B">Storage: {{ storageError }}</p>
+        </div>
+      </div>
+
       <!-- Storage Info -->
       <div
-        class="rounded-lg p-3 md:p-4 mb-4 md:mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4"
+        class="rounded-lg p-3 md:p-4 mb-4 md:mb-6"
         style="background-color: rgba(65, 185, 195, 0.1); border: 1px solid rgba(65, 185, 195, 0.3)"
       >
-        <div>
-          <p class="text-sm md:text-base" style="color: #96EEF2">Total Storage: {{ storageTotalGb.toFixed(0) }} GB</p>
-          <p class="text-sm md:text-base" style="color: #41B9C3">Available: {{ storageAvailableGb.toFixed(0) }} GB ({{ storageAvailablePercent }}%)</p>
+        <div v-if="storageLoading && !hasStorageData" class="flex items-center gap-2">
+          <Loader2 class="w-4 h-4 animate-spin" style="color: #41B9C3" />
+          <span class="text-sm" style="color: #96EEF2">Loading storage info...</span>
         </div>
-        <div class="text-left md:text-right">
-          <p class="text-sm md:text-base" style="color: #96EEF2">Total Files: {{ mediaFiles.length }}</p>
-          <p class="text-sm md:text-base" style="color: #96EEF2">
-            {{ mediaFiles.filter((f: DisplayFile) => f.type === 'video').length }} videos,
-            {{ mediaFiles.filter((f: DisplayFile) => f.type === 'image').length }} images,
-            {{ mediaFiles.filter((f: DisplayFile) => f.type === 'sensor').length }} sensor files
-          </p>
+        <div v-else class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4">
+          <div>
+            <p class="text-sm md:text-base" style="color: #96EEF2">
+              Total Storage: {{ hasStorageData ? storageTotalGb.toFixed(1) + ' GB' : 'Unavailable' }}
+            </p>
+            <p class="text-sm md:text-base" style="color: #41B9C3">
+              Available: {{ hasStorageData ? storageAvailableGb.toFixed(1) + ' GB (' + storageAvailablePercent + '%)' : 'Unavailable' }}
+            </p>
+            <div v-if="hasStorageData" class="w-full md:w-48 rounded-full h-2 mt-2" style="background-color: rgba(14, 36, 70, 0.6)">
+              <div
+                class="h-2 rounded-full transition-all"
+                :style="{
+                  width: `${storageUsedPercent}%`,
+                  background: storageUsedPercent > 90 ? 'linear-gradient(90deg, #DD2C1D 0%, #FF4757 100%)' : storageUsedPercent > 70 ? 'linear-gradient(90deg, #FF9937 0%, #FFB800 100%)' : 'linear-gradient(90deg, #41B9C3 0%, #96EEF2 100%)'
+                }"
+              />
+            </div>
+          </div>
+          <div class="text-left md:text-right">
+            <p class="text-sm md:text-base" style="color: #96EEF2">Total Files: {{ mediaFiles.length }}</p>
+            <p v-if="mediaFiles.length > 0" class="text-sm md:text-base" style="color: #96EEF2">
+              {{ mediaFiles.filter((f: DisplayFile) => f.type === 'video').length }} videos,
+              {{ mediaFiles.filter((f: DisplayFile) => f.type === 'image').length }} images,
+              {{ mediaFiles.filter((f: DisplayFile) => f.type === 'sensor').length }} sensor files
+            </p>
+          </div>
         </div>
       </div>
 
@@ -405,8 +443,14 @@ const handlePageChange = (page: number) => {
           </tbody>
         </table>
 
-        <div v-if="sortedFiles.length === 0" class="text-center py-12">
-          <p style="color: #96EEF2">No files found</p>
+        <div v-if="mediaLoading && mediaFiles.length === 0" class="text-center py-12">
+          <Loader2 class="w-8 h-8 mx-auto mb-3 animate-spin" style="color: #41B9C3" />
+          <p style="color: #96EEF2">Loading files...</p>
+        </div>
+        <div v-else-if="sortedFiles.length === 0 && !mediaLoading" class="text-center py-12">
+          <FolderOpen class="w-10 h-10 mx-auto mb-3" style="color: #41B9C3; opacity: 0.5" />
+          <p class="text-white mb-1">{{ searchQuery ? 'No matching files' : 'No files found' }}</p>
+          <p class="text-sm" style="color: #96EEF2">{{ searchQuery ? 'Try a different search term' : 'Files from dives will appear here' }}</p>
         </div>
       </div>
 
@@ -514,8 +558,14 @@ const handlePageChange = (page: number) => {
           </div>
         </div>
 
-        <div v-if="sortedFiles.length === 0" class="text-center py-12">
-          <p style="color: #96EEF2">No files found</p>
+        <div v-if="mediaLoading && mediaFiles.length === 0" class="text-center py-12">
+          <Loader2 class="w-8 h-8 mx-auto mb-3 animate-spin" style="color: #41B9C3" />
+          <p style="color: #96EEF2">Loading files...</p>
+        </div>
+        <div v-else-if="sortedFiles.length === 0 && !mediaLoading" class="text-center py-12">
+          <FolderOpen class="w-10 h-10 mx-auto mb-3" style="color: #41B9C3; opacity: 0.5" />
+          <p class="text-white mb-1">{{ searchQuery ? 'No matching files' : 'No files found' }}</p>
+          <p class="text-sm" style="color: #96EEF2">{{ searchQuery ? 'Try a different search term' : 'Files from dives will appear here' }}</p>
         </div>
       </div>
 
