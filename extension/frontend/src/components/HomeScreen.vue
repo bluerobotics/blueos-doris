@@ -38,6 +38,10 @@ const { location, fetchLocation } = useLocation()
 const { modules: sensorModules, fetchModules } = useSensors()
 
 const batteryLevel = computed(() => battery.value?.level ?? systemStatus.value?.battery_level ?? 0)
+const batteryVoltage = computed(() => {
+  const v = Number(battery.value?.voltage ?? systemStatus.value?.battery_voltage ?? 0)
+  return isNaN(v) ? '0.0' : v.toFixed(1)
+})
 const storageUsed = computed(() => storage.value?.used_percent ?? systemStatus.value?.storage_used_percent ?? 0)
 const storageTotal = computed(() => storage.value?.total_gb ?? systemStatus.value?.storage_total_gb ?? 100)
 const storageAvailableGb = computed(() => storage.value?.available_gb ?? (storageTotal.value - (storage.value?.used_gb ?? systemStatus.value?.storage_used_gb ?? 0)))
@@ -605,9 +609,9 @@ const formatReleaseTime = (date: Date) => {
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
             <Battery class="w-5 h-5" style="color: #96EEF2" />
-            <span class="text-white">Battery</span>
+            <span class="text-white">Battery <span style="color: #96EEF2">({{ batteryVoltage }}V)</span></span>
           </div>
-          <span style="color: #FCD869">{{ batteryLevel }}%</span>
+          <span style="color: #FCD869">{{ batteryLevel.toFixed(1) }}%</span>
         </div>
         <div class="w-full rounded-full h-2" style="background-color: rgba(14, 36, 70, 0.6)">
           <div
