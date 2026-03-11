@@ -1,9 +1,23 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { Wifi, WifiOff, Upload, RefreshCw } from 'lucide-vue-next'
 import {
-  Gauge, Wifi, WifiOff, Settings, Upload, RefreshCw,
-  Camera, Lightbulb, Thermometer, Waves, Activity, Wind, Satellite, Radio
-} from 'lucide-vue-next'
+  mdiCameraOutline,
+  mdiVideoOutline,
+  mdiLightbulbOnOutline,
+  mdiThermometerLines,
+  mdiWaves,
+  mdiGauge,
+  mdiMoleculeCo2,
+  mdiBottleTonicOutline,
+  mdiSatelliteUplink,
+  mdiAccessPointNetwork,
+  mdiRadar,
+  mdiSineWave,
+  mdiWaterOutline,
+  mdiCogOutline,
+  mdiChip,
+} from '@mdi/js'
 import { useSensors } from '../composables/useApi'
 import type { SensorModule as ApiSensorModule } from '../composables/useApi'
 import type { Screen } from '../types'
@@ -107,19 +121,26 @@ const setModuleRef = (id: string, el: HTMLDivElement | null) => {
   moduleRefs.value[id] = el
 }
 
-const getModuleIcon = (name: string) => {
-  switch (name) {
-    case 'Camera': return Camera
-    case 'Conductivity': return Activity
-    case 'Temperature': return Thermometer
-    case 'Depth': return Waves
-    case 'Light': return Lightbulb
-    case 'Carbon Dioxide (CO₂)': return Wind
-    case 'Oxygen (O₂)': return Wind
-    case 'Iridium': return Satellite
-    case 'LoRa': return Radio
-    default: return Gauge
-  }
+const getModuleIcon = (mod: DisplayModule): string => {
+  const name = mod.name.toLowerCase()
+  const type = mod.type.toLowerCase()
+
+  if (type === 'camera' || name.includes('camera')) return mdiCameraOutline
+  if (type === 'video' || name.includes('video') || name.includes('stream')) return mdiVideoOutline
+  if (type === 'light' || name.includes('light')) return mdiLightbulbOnOutline
+  if (name.includes('temperature') || name.includes('temp')) return mdiThermometerLines
+  if (name.includes('depth') || name.includes('pressure')) return mdiWaves
+  if (name.includes('conductivity') || name.includes('ctd')) return mdiSineWave
+  if (name.includes('co2') || name.includes('co₂') || name.includes('carbon')) return mdiMoleculeCo2
+  if (name.includes('o2') || name.includes('o₂') || name.includes('oxygen')) return mdiBottleTonicOutline
+  if (name.includes('iridium')) return mdiSatelliteUplink
+  if (name.includes('lora')) return mdiAccessPointNetwork
+  if (name.includes('ping') || name.includes('sonar')) return mdiRadar
+  if (name.includes('water') || name.includes('leak')) return mdiWaterOutline
+  if (type === 'communication') return mdiAccessPointNetwork
+  if (type === 'sensor') return mdiChip
+
+  return mdiGauge
 }
 
 const getStatusColor = (moduleStatus: string) => {
@@ -137,7 +158,9 @@ const getStatusColor = (moduleStatus: string) => {
     >
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <h1 class="text-white text-2xl flex items-center gap-2">
-          <Gauge class="w-6 h-6" style="color: #96EEF2" />
+          <svg class="w-6 h-6" viewBox="0 0 24 24" style="color: #96EEF2">
+            <path :d="mdiGauge" fill="currentColor" />
+          </svg>
           Sensor Status
         </h1>
         <button
@@ -173,7 +196,9 @@ const getStatusColor = (moduleStatus: string) => {
           >
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center gap-3">
-                <component :is="getModuleIcon(mod.name)" class="w-6 h-6" style="color: #96EEF2" />
+                <svg class="w-6 h-6" viewBox="0 0 24 24" style="color: #96EEF2">
+                  <path :d="getModuleIcon(mod)" fill="currentColor" />
+                </svg>
                 <div>
                   <h3 class="text-white">{{ mod.name }}</h3>
                 </div>
@@ -217,7 +242,9 @@ const getStatusColor = (moduleStatus: string) => {
             style="background-color: rgba(65, 185, 195, 0.15); border: 1px solid #41B9C3; border-top: 1px solid rgba(65, 185, 195, 0.3); border-radius: 0 0 0.5rem 0.5rem"
           >
             <h2 class="text-white mb-4 flex items-center gap-2">
-              <Settings class="w-5 h-5" style="color: #96EEF2" />
+              <svg class="w-5 h-5" viewBox="0 0 24 24" style="color: #96EEF2">
+                <path :d="mdiCogOutline" fill="currentColor" />
+              </svg>
               {{ selectedModule.name }} Configuration
             </h2>
 
