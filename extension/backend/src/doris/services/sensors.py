@@ -37,15 +37,6 @@ class SensorService:
         ping_modules = await self._get_ping_modules()
         modules.extend(ping_modules)
 
-        # Add light module (usually part of camera system)
-        light = await self._get_light_module()
-        if light:
-            modules.append(light)
-
-        # If no real modules found, return mock data
-        if not modules:
-            modules = self._get_mock_modules()
-
         return modules
 
     async def get_sensor_readings(self, sensor_id: str) -> list[SensorReading]:
@@ -175,68 +166,6 @@ class SensorService:
         except Exception as e:
             logger.warning(f"Failed to get ping sensors: {e}")
         return modules
-
-    async def _get_light_module(self) -> ModuleInfo | None:
-        """Get light module info."""
-        # Lights are typically controlled via MAVLink
-        try:
-            # Check for lights via MAVLink servo outputs
-            return ModuleInfo(
-                id="light-1",
-                name="Light Module",
-                type="light",
-                status="connected",
-                module_status="Ready: Active",
-                power_usage=88.0,
-                last_reading=datetime.now().isoformat(),
-            )
-        except Exception:
-            pass
-        return None
-
-    def _get_mock_modules(self) -> list[ModuleInfo]:
-        """Return mock module data for testing."""
-        now = datetime.now().isoformat()
-        return [
-            ModuleInfo(
-                id="camera-1",
-                name="Camera Module",
-                type="camera",
-                status="connected",
-                module_status="Ready: Active",
-                power_usage=95.0,
-                last_reading=now,
-            ),
-            ModuleInfo(
-                id="ctd-1",
-                name="CTD Sensor",
-                type="sensor",
-                status="connected",
-                module_status="Ready: Active",
-                power_usage=98.0,
-                sample_rate=1.0,
-                last_reading=now,
-            ),
-            ModuleInfo(
-                id="light-1",
-                name="Light Module",
-                type="light",
-                status="connected",
-                module_status="Warning: Leak Detected",
-                power_usage=88.0,
-                last_reading=now,
-            ),
-            ModuleInfo(
-                id="co2-1",
-                name="CO/O2",
-                type="sensor",
-                status="disconnected",
-                module_status="Disconnected",
-                power_usage=0.0,
-                sample_rate=1.0,
-                last_reading=None,
-            ),
-        ]
 
     async def close(self) -> None:
         """Close HTTP clients."""

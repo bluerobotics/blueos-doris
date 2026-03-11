@@ -60,10 +60,6 @@ def register_mission_routes(app: Robyn) -> None:
                     )
                 )
 
-            # If no missions, return mock data
-            if not summaries:
-                summaries = _get_mock_mission_summaries()
-
             return json.dumps([s.model_dump(mode="json") for s in summaries])
         except Exception as e:
             return Response(
@@ -255,65 +251,4 @@ def register_mission_routes(app: Robyn) -> None:
                 description=json.dumps({"error": str(e)}),
                 headers={"Content-Type": "application/json"},
             )
-
-
-def _get_mock_mission_summaries() -> list[MissionSummary]:
-    """Return mock mission data for testing."""
-    return [
-        MissionSummary(
-            id="mission-001",
-            name="Deep Sea Survey 2024-01",
-            status=MissionStatus.COMPLETED,
-            date=datetime(2026, 1, 5),
-            duration="3h 45m",
-            location="41.7128° N, 74.0060° W",
-            max_depth=125.0,
-            image_count=487,
-            video_count=3,
-        ),
-        MissionSummary(
-            id="mission-002",
-            name="Coral Reef Documentation",
-            status=MissionStatus.COMPLETED,
-            date=datetime(2026, 1, 2),
-            duration="2h 18m",
-            location="25.7617° N, 80.1918° W",
-            max_depth=45.0,
-            image_count=324,
-            video_count=5,
-        ),
-        MissionSummary(
-            id="mission-003",
-            name="Kelp Forest Study",
-            status=MissionStatus.COMPLETED,
-            date=datetime(2025, 12, 28),
-            duration="4h 12m",
-            location="36.6002° N, 121.8947° W",
-            max_depth=78.0,
-            image_count=612,
-            video_count=7,
-        ),
-        MissionSummary(
-            id="mission-004",
-            name="Shipwreck Investigation",
-            status=MissionStatus.COMPLETED,
-            date=datetime(2025, 12, 20),
-            duration="5h 30m",
-            location="42.3601° N, 71.0589° W",
-            max_depth=156.0,
-            image_count=893,
-            video_count=12,
-        ),
-        MissionSummary(
-            id="mission-005",
-            name="Bioluminescence Survey",
-            status=MissionStatus.COMPLETED,
-            date=datetime(2025, 12, 15),
-            duration="6h 05m",
-            location="33.7157° N, 117.1611° W",
-            max_depth=89.0,
-            image_count=1024,
-            video_count=15,
-        ),
-    ]
 
