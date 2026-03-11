@@ -48,53 +48,45 @@ const handleSubmitBugReport = (e: Event) => {
 
 <template>
   <div class="max-w-6xl mx-auto px-4 py-6 md:py-8">
-    <div 
-      class="backdrop-blur-sm rounded-xl p-6 border mb-6"
-      style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
-    >
+    <!-- Header -->
+    <div class="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 mb-6">
       <h1 class="text-white text-2xl mb-2 flex items-center gap-2">
-        <HelpCircle class="w-6 h-6" style="color: #96EEF2" />
+        <HelpCircle class="w-6 h-6 text-cyan-400" />
         Help & Tutorials
       </h1>
-      <p style="color: #96EEF2">Learn how to use DORIS effectively and troubleshoot common issues</p>
+      <p class="text-cyan-300">Learn how to use DORIS effectively and troubleshoot common issues</p>
     </div>
 
     <!-- Quick Links -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       <a
         href="#"
-        class="backdrop-blur-sm rounded-xl p-6 border transition-all hover:border-opacity-60"
-        style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
+        class="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 hover:border-cyan-500/40 transition-all"
       >
-        <Book class="w-8 h-8 mb-3" style="color: #96EEF2" />
+        <Book class="w-8 h-8 text-cyan-400 mb-3" />
         <h3 class="text-white mb-2">User Manual</h3>
-        <p class="text-sm" style="color: #96EEF2">Complete documentation and reference guide</p>
+        <p class="text-cyan-300 text-sm">Complete documentation and reference guide</p>
       </a>
       <a
         href="#"
-        class="backdrop-blur-sm rounded-xl p-6 border transition-all hover:border-opacity-60"
-        style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
+        class="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 hover:border-cyan-500/40 transition-all"
       >
-        <ExternalLink class="w-8 h-8 mb-3" style="color: #96EEF2" />
+        <ExternalLink class="w-8 h-8 text-cyan-400 mb-3" />
         <h3 class="text-white mb-2">Online Community</h3>
-        <p class="text-sm" style="color: #96EEF2">Connect with other DORIS users</p>
+        <p class="text-cyan-300 text-sm">Connect with other DORIS users</p>
       </a>
       <a
         href="#"
-        class="backdrop-blur-sm rounded-xl p-6 border transition-all hover:border-opacity-60"
-        style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
+        class="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 hover:border-cyan-500/40 transition-all"
       >
-        <Download class="w-8 h-8 mb-3" style="color: #96EEF2" />
+        <Download class="w-8 h-8 text-cyan-400 mb-3" />
         <h3 class="text-white mb-2">Software Updates</h3>
-        <p class="text-sm" style="color: #96EEF2">Check for latest firmware and features</p>
+        <p class="text-cyan-300 text-sm">Check for latest firmware and features</p>
       </a>
     </div>
 
     <!-- Video Tutorials -->
-    <div 
-      class="backdrop-blur-sm rounded-xl p-6 border mb-6"
-      style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
-    >
+    <div class="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 mb-6">
       <h2 class="text-white text-xl mb-4">Video Tutorials</h2>
 
       <!-- Category Filter -->
@@ -102,36 +94,36 @@ const handleSubmitBugReport = (e: Event) => {
         <button
           @click="selectedCategory = 'all'"
           class="px-4 py-2 rounded-lg transition-all"
-          :style="selectedCategory === 'all' 
-            ? { backgroundColor: '#41B9C3', color: 'white' }
-            : { backgroundColor: 'rgba(14, 36, 70, 0.5)', color: '#96EEF2' }"
+          :class="selectedCategory === 'all'
+            ? 'bg-cyan-500 text-white'
+            : 'bg-slate-700 text-cyan-300 hover:bg-slate-600'"
         >
           All Tutorials
         </button>
         <button
           @click="selectedCategory = 'setup'"
           class="px-4 py-2 rounded-lg transition-all"
-          :style="selectedCategory === 'setup' 
-            ? { backgroundColor: '#41B9C3', color: 'white' }
-            : { backgroundColor: 'rgba(14, 36, 70, 0.5)', color: '#96EEF2' }"
+          :class="selectedCategory === 'setup'
+            ? 'bg-cyan-500 text-white'
+            : 'bg-slate-700 text-cyan-300 hover:bg-slate-600'"
         >
           Setup
         </button>
         <button
           @click="selectedCategory = 'operation'"
           class="px-4 py-2 rounded-lg transition-all"
-          :style="selectedCategory === 'operation' 
-            ? { backgroundColor: '#41B9C3', color: 'white' }
-            : { backgroundColor: 'rgba(14, 36, 70, 0.5)', color: '#96EEF2' }"
+          :class="selectedCategory === 'operation'
+            ? 'bg-cyan-500 text-white'
+            : 'bg-slate-700 text-cyan-300 hover:bg-slate-600'"
         >
           Operation
         </button>
         <button
           @click="selectedCategory = 'troubleshooting'"
           class="px-4 py-2 rounded-lg transition-all"
-          :style="selectedCategory === 'troubleshooting' 
-            ? { backgroundColor: '#41B9C3', color: 'white' }
-            : { backgroundColor: 'rgba(14, 36, 70, 0.5)', color: '#96EEF2' }"
+          :class="selectedCategory === 'troubleshooting'
+            ? 'bg-cyan-500 text-white'
+            : 'bg-slate-700 text-cyan-300 hover:bg-slate-600'"
         >
           Troubleshooting
         </button>
@@ -142,11 +134,10 @@ const handleSubmitBugReport = (e: Event) => {
         <div
           v-for="tutorial in filteredTutorials"
           :key="tutorial.id"
-          class="rounded-lg p-4 flex items-center justify-between transition-all hover:bg-slate-700/30"
-          style="background-color: rgba(14, 36, 70, 0.5)"
+          class="bg-slate-700/50 rounded-lg p-4 flex items-center justify-between hover:bg-slate-700 transition-all"
         >
           <div class="flex items-center gap-4 flex-1">
-            <div 
+            <div
               class="w-16 h-16 rounded-lg flex items-center justify-center"
               style="background: linear-gradient(135deg, #41B9C3 0%, #187D8B 100%)"
             >
@@ -154,39 +145,32 @@ const handleSubmitBugReport = (e: Event) => {
             </div>
             <div class="flex-1">
               <h3 class="text-white mb-1">{{ tutorial.title }}</h3>
-              <p class="text-sm mb-1" style="color: #96EEF2">{{ tutorial.description }}</p>
+              <p class="text-cyan-300 text-sm mb-1">{{ tutorial.description }}</p>
               <div class="flex items-center gap-3 text-sm">
-                <span style="color: #41B9C3">{{ tutorial.duration }}</span>
-                <span 
+                <span class="text-cyan-400">{{ tutorial.duration }}</span>
+                <span
                   class="px-2 py-0.5 rounded text-xs"
-                  :style="tutorial.downloaded 
-                    ? { backgroundColor: 'rgba(34, 197, 94, 0.2)', color: '#22c55e' }
-                    : { backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6' }"
+                  :class="tutorial.downloaded
+                    ? 'bg-green-500/20 text-green-400'
+                    : 'bg-blue-500/20 text-blue-400'"
                 >
                   {{ tutorial.downloaded ? 'Downloaded' : 'Online Only' }}
                 </span>
-                <span 
-                  class="px-2 py-0.5 rounded text-xs capitalize"
-                  style="background-color: rgba(168, 85, 247, 0.2); color: #a855f7"
-                >
+                <span class="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400 capitalize">
                   {{ tutorial.category }}
                 </span>
               </div>
             </div>
           </div>
           <div class="flex gap-2">
-            <button 
+            <button
               v-if="!tutorial.downloaded"
-              class="px-4 py-2 rounded-lg transition-all flex items-center gap-2"
-              style="background-color: rgba(14, 36, 70, 0.5); color: white"
+              class="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-all flex items-center gap-2"
             >
               <Download class="w-4 h-4" />
               Download
             </button>
-            <button 
-              class="px-4 py-2 text-white rounded-lg transition-all hover:opacity-90"
-              style="background-color: #41B9C3"
-            >
+            <button class="px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-all">
               Watch
             </button>
           </div>
@@ -195,51 +179,42 @@ const handleSubmitBugReport = (e: Event) => {
     </div>
 
     <!-- FAQ Section -->
-    <div 
-      class="backdrop-blur-sm rounded-xl p-6 border mb-6"
-      style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
-    >
+    <div class="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 mb-6">
       <h2 class="text-white text-xl mb-4">Frequently Asked Questions</h2>
       <div class="space-y-4">
-        <div 
-          v-for="(faq, index) in faqs" 
+        <div
+          v-for="(faq, index) in faqs"
           :key="index"
-          class="rounded-lg p-4"
-          style="background-color: rgba(14, 36, 70, 0.3)"
+          class="bg-slate-700/30 rounded-lg p-4"
         >
           <h3 class="text-white mb-2">{{ faq.question }}</h3>
-          <p class="text-sm" style="color: #96EEF2">{{ faq.answer }}</p>
+          <p class="text-cyan-300 text-sm">{{ faq.answer }}</p>
         </div>
       </div>
     </div>
 
     <!-- Bug Report Form -->
-    <div 
-      class="backdrop-blur-sm rounded-xl p-6 border"
-      style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
-    >
+    <div class="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20">
       <h2 class="text-white text-xl mb-4 flex items-center gap-2">
-        <AlertCircle class="w-6 h-6" style="color: #96EEF2" />
+        <AlertCircle class="w-6 h-6 text-cyan-400" />
         Report a Bug or Issue
       </h2>
       <form @submit="handleSubmitBugReport" class="space-y-4">
         <div>
-          <label class="block text-sm mb-2" style="color: #96EEF2">Issue Title</label>
+          <label class="block text-cyan-300 text-sm mb-2">Issue Title</label>
           <input
             type="text"
             v-model="bugReport.title"
             required
-            class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-            style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
+            class="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-cyan-500/30 focus:border-cyan-500 focus:outline-none"
             placeholder="Brief description of the issue"
           />
         </div>
         <div>
-          <label class="block text-sm mb-2" style="color: #96EEF2">Severity</label>
+          <label class="block text-cyan-300 text-sm mb-2">Severity</label>
           <select
             v-model="bugReport.severity"
-            class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-            style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
+            class="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-cyan-500/30 focus:border-cyan-500 focus:outline-none"
           >
             <option value="low">Low - Minor inconvenience</option>
             <option value="medium">Medium - Affects functionality</option>
@@ -247,20 +222,18 @@ const handleSubmitBugReport = (e: Event) => {
           </select>
         </div>
         <div>
-          <label class="block text-sm mb-2" style="color: #96EEF2">Detailed Description</label>
+          <label class="block text-cyan-300 text-sm mb-2">Detailed Description</label>
           <textarea
             v-model="bugReport.description"
             required
             rows="5"
-            class="w-full px-4 py-2 text-white rounded-lg focus:outline-none resize-none"
-            style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
+            class="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-cyan-500/30 focus:border-cyan-500 focus:outline-none resize-none"
             placeholder="Please provide as much detail as possible, including steps to reproduce the issue..."
           ></textarea>
         </div>
         <button
           type="submit"
-          class="w-full px-4 py-3 text-white rounded-lg transition-all hover:opacity-90 flex items-center justify-center gap-2"
-          style="background-color: #41B9C3"
+          class="w-full px-4 py-3 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-all flex items-center justify-center gap-2"
         >
           <Send class="w-5 h-5" />
           Submit Bug Report
@@ -269,4 +242,3 @@ const handleSubmitBugReport = (e: Event) => {
     </div>
   </div>
 </template>
-

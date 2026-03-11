@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Home, Wifi, Compass, Gauge, Database, Bell, HelpCircle, MapPin } from 'lucide-vue-next'
+import { ref, computed } from 'vue'
+import { Home, Wifi, Compass, Gauge, Database, Bell, HelpCircle, List, Menu, X } from 'lucide-vue-next'
 import type { Screen } from '../types'
 
 interface Props {
   currentScreen: Screen
-  isConnected: boolean
   notificationCount?: number
 }
 
@@ -17,99 +16,125 @@ const emit = defineEmits<{
   navigate: [screen: Screen]
 }>()
 
+const mobileMenuOpen = ref(false)
+
 const navItems = computed(() => [
-  { id: 'home' as Screen, icon: Home, label: 'Status' },
-  { id: 'location' as Screen, icon: MapPin, label: 'Location' },
-  { id: 'missions' as Screen, icon: Compass, label: 'Missions' },
-  { id: 'sensors' as Screen, icon: Gauge, label: 'Sensors' },
-  { id: 'media' as Screen, icon: Database, label: 'Media' },
-  { id: 'network' as Screen, icon: Wifi, label: 'Network' },
-  { id: 'notifications' as Screen, icon: Bell, label: 'Notifications', badge: props.notificationCount },
+  { id: 'home' as Screen, icon: Home, label: 'Dashboard', enabled: true },
+  { id: 'dives' as Screen, icon: Compass, label: 'Configuration', enabled: true },
+  { id: 'alldives' as Screen, icon: List, label: 'Previous Dives', enabled: true },
+  { id: 'sensors' as Screen, icon: Gauge, label: 'Sensors', enabled: true },
+  { id: 'media' as Screen, icon: Database, label: 'Data', enabled: true },
+  { id: 'network' as Screen, icon: Wifi, label: 'Network', enabled: true },
+  { id: 'notifications' as Screen, icon: Bell, label: 'Notifications', badge: props.notificationCount, enabled: true },
+  { id: 'help' as Screen, icon: HelpCircle, label: 'Help', enabled: true },
 ])
+
+const handleMobileNavigate = (screen: Screen) => {
+  emit('navigate', screen)
+  mobileMenuOpen.value = false
+}
 </script>
 
 <template>
   <!-- Desktop Navigation -->
-  <nav 
-    class="hidden md:flex items-center justify-between px-6 py-4 border-b"
+  <nav
+    class="hidden md:flex items-center justify-between px-4 py-3 border-b"
     style="background-color: rgba(14, 36, 70, 0.8); backdrop-filter: blur(8px); border-color: rgba(65, 185, 195, 0.2)"
   >
-    <button 
+    <button
       @click="emit('navigate', 'home')"
       class="flex items-center gap-6 hover:opacity-80 transition-opacity mr-12"
     >
-      <h1 class="text-white font-bold text-xl">DORIS</h1>
+      <h1 class="text-white text-2xl" style="font-weight: 700; font-family: 'Montserrat', sans-serif">DORIS</h1>
     </button>
-    
     <div class="flex items-center gap-2">
       <button
         v-for="item in navItems"
         :key="item.id"
-        @click="emit('navigate', item.id)"
+        @click="item.enabled && emit('navigate', item.id)"
         class="flex items-center gap-2 px-4 py-2 rounded-lg transition-all"
-        :style="currentScreen === item.id 
+        :class="[
+          currentScreen === item.id ? 'text-white' : item.enabled ? 'hover:bg-slate-800' : 'cursor-not-allowed'
+        ]"
+        :style="currentScreen === item.id
           ? { backgroundColor: '#41B9C3', color: '#FFFFFF' }
-          : { color: '#96EEF2' }"
-        :class="currentScreen !== item.id && 'hover:bg-slate-800'"
+          : { color: item.enabled ? '#96EEF2' : 'rgba(150, 238, 242, 0.3)', opacity: item.enabled ? 1 : 0.5 }"
+        :disabled="!item.enabled"
       >
         <component :is="item.icon" class="w-4 h-4" />
         <span v-if="item.id !== 'notifications'" class="text-sm">{{ item.label }}</span>
-        <span 
+        <span
           v-if="item.badge && item.badge > 0"
-          class="ml-1 text-xs px-1.5 py-0.5 rounded-full text-center"
-          style="background-color: #DD2C1D; color: white; min-width: 20px"
+          class="ml-1 text-xs px-1.5 py-0.5 rounded-full"
+          style="background-color: #DD2C1D; color: white; min-width: 20px; text-align: center"
         >
           {{ item.badge }}
         </span>
       </button>
     </div>
-
-    <div class="flex items-center gap-4">
-      <!-- Help - Display Only -->
-      <div class="flex items-center gap-2 px-3 py-2" style="color: #96EEF2; opacity: 0.6">
-        <HelpCircle class="w-4 h-4" />
-        <span class="text-sm">Help</span>
-      </div>
-      
-      <!-- Connection Status -->
-      <div class="flex items-center gap-2">
-        <div 
-          class="w-2 h-2 rounded-full"
-          :style="{ backgroundColor: isConnected ? '#FCD869' : '#DD2C1D' }"
-        ></div>
-        <span class="text-sm" style="color: #96EEF2">
-          {{ isConnected ? 'Connected' : 'Disconnected' }}
-        </span>
-      </div>
-    </div>
   </nav>
 
-  <!-- Mobile Navigation -->
-  <nav 
-    class="md:hidden fixed bottom-0 left-0 right-0 border-t z-50"
+  <!-- Mobile Navigation Header -->
+  <nav
+    class="md:hidden flex items-center justify-between px-4 py-3 border-b"
     style="background-color: rgba(14, 36, 70, 0.95); backdrop-filter: blur(8px); border-color: rgba(65, 185, 195, 0.2)"
   >
-    <div class="flex items-center justify-around px-2 py-2">
-      <button
-        v-for="item in navItems"
-        :key="item.id"
-        @click="emit('navigate', item.id)"
-        class="relative flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-all"
-        :style="currentScreen === item.id 
-          ? { backgroundColor: '#41B9C3', color: '#FFFFFF' }
-          : { color: '#96EEF2' }"
+    <button
+      @click="emit('navigate', 'home')"
+      class="flex items-center hover:opacity-80 transition-opacity"
+    >
+      <h1 class="text-white text-2xl" style="font-weight: 700; font-family: 'Montserrat', sans-serif">DORIS</h1>
+    </button>
+    <button
+      @click="mobileMenuOpen = !mobileMenuOpen"
+      class="relative p-2 rounded-lg transition-all"
+      style="color: #96EEF2"
+    >
+      <X v-if="mobileMenuOpen" class="w-6 h-6" />
+      <Menu v-else class="w-6 h-6" />
+      <span
+        v-if="notificationCount > 0 && !mobileMenuOpen"
+        class="absolute top-1 right-1 text-xs px-1.5 py-0.5 rounded-full"
+        style="background-color: #DD2C1D; color: white; min-width: 18px; text-align: center; font-size: 10px"
       >
-        <component :is="item.icon" class="w-5 h-5" />
-        <span v-if="item.id !== 'notifications'" class="text-xs">{{ item.label }}</span>
-        <span 
-          v-if="item.badge && item.badge > 0"
-          class="absolute top-1 right-1 text-xs px-1.5 py-0.5 rounded-full text-center"
-          style="background-color: #DD2C1D; color: white; min-width: 18px; font-size: 10px"
-        >
-          {{ item.badge }}
-        </span>
-      </button>
-    </div>
+        {{ notificationCount }}
+      </span>
+    </button>
   </nav>
-</template>
 
+  <!-- Mobile Menu Dropdown -->
+  <template v-if="mobileMenuOpen">
+    <div
+      class="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+      @click="mobileMenuOpen = false"
+    />
+    <div
+      class="md:hidden fixed top-[57px] left-0 right-0 z-50 border-b"
+      style="background-color: rgba(14, 36, 70, 0.98); backdrop-filter: blur(8px); border-color: rgba(65, 185, 195, 0.2); max-height: calc(100vh - 57px); overflow-y: auto"
+    >
+      <div class="py-2">
+        <button
+          v-for="item in navItems"
+          :key="item.id"
+          @click="item.enabled && handleMobileNavigate(item.id)"
+          class="w-full flex items-center gap-3 px-4 py-3 transition-all"
+          :class="currentScreen === item.id ? 'text-white' : ''"
+          :style="currentScreen === item.id
+            ? { backgroundColor: '#41B9C3', color: '#FFFFFF' }
+            : { color: item.enabled ? '#96EEF2' : 'rgba(150, 238, 242, 0.3)', opacity: item.enabled ? 1 : 0.5 }"
+          :disabled="!item.enabled"
+        >
+          <component :is="item.icon" class="w-5 h-5" />
+          <span class="text-base">{{ item.label }}</span>
+          <span
+            v-if="item.badge && item.badge > 0"
+            class="ml-auto text-xs px-2 py-1 rounded-full"
+            style="background-color: #DD2C1D; color: white; min-width: 24px; text-align: center"
+          >
+            {{ item.badge }}
+          </span>
+        </button>
+      </div>
+    </div>
+  </template>
+</template>

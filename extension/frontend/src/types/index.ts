@@ -1,4 +1,4 @@
-export type Screen = 'home' | 'missions' | 'sensors' | 'media' | 'network' | 'notifications' | 'help' | 'location'
+export type Screen = 'home' | 'dives' | 'alldives' | 'sensors' | 'media' | 'network' | 'notifications' | 'help' | 'location' | 'viewmedia'
 
 export interface Module {
   id: number
@@ -18,7 +18,7 @@ export interface Network {
 export interface SensorModule {
   id: number
   name: string
-  type: 'camera' | 'sensor' | 'light'
+  type: 'camera' | 'sensor' | 'light' | 'communication'
   connected: boolean
   power: number
   sampleRate?: number
@@ -29,6 +29,7 @@ export interface SensorModule {
 export interface Mission {
   id: number
   name: string
+  configuration: string
   date: string
   duration: string
   location: string
@@ -36,16 +37,24 @@ export interface Mission {
   images: number
   videos: number
   status: string
+  calibrationFiles: {
+    camera: string
+    depthSensor: string
+    temperature: string
+    conductivity: string
+    imu: string
+  }
 }
 
 export interface MediaFile {
   id: number
-  name: string
-  type: 'video' | 'image' | 'sensor'
-  mission: string
+  fileName: string
+  type: 'video' | 'image' | 'sensor' | 'log'
+  diveName: string
   date: string
   size: string
   timestamp: string
+  thumbnailUrl?: string
 }
 
 export interface MissionData {
@@ -77,19 +86,14 @@ export interface Tutorial {
   downloaded: boolean
 }
 
-export interface CameraSettings {
-  resolution: string
-  frameRate: number
-  focus: string
+export interface DiveData {
+  name: string
+  date: string
+  duration: string
+  maxDepth: string
+  location: string
+  gpsPosition?: string
+  operator?: string
+  images?: number
+  videos?: number
 }
-
-export interface Duration {
-  value: number
-  unit: string
-}
-
-export interface Timelapse {
-  enabled: boolean
-  interval: number
-}
-

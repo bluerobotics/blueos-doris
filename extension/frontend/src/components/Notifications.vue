@@ -62,7 +62,7 @@ const notifications = ref<Notification[]>([
 const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
 
 const markAsRead = (id: number) => {
-  notifications.value = notifications.value.map(n => 
+  notifications.value = notifications.value.map(n =>
     n.id === id ? { ...n, read: true } : n
   )
 }
@@ -89,11 +89,18 @@ const handleNotificationClick = (notification: Notification) => {
     emit('navigate', notification.linkTo)
   }
 }
+
+const notificationSettings = ref({
+  missionAlerts: true,
+  systemWarnings: true,
+  networkStatus: true,
+  softwareUpdates: false
+})
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto px-4 py-6 md:py-8">
-    <div 
+    <div
       class="backdrop-blur-sm rounded-xl p-6 border mb-6"
       style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
     >
@@ -101,7 +108,7 @@ const handleNotificationClick = (notification: Notification) => {
         <div class="flex items-center gap-3">
           <Bell class="w-6 h-6" style="color: #96EEF2" />
           <h1 class="text-white text-2xl">Notifications</h1>
-          <span 
+          <span
             v-if="unreadCount > 0"
             class="px-3 py-1 rounded-full text-sm"
             style="background-color: #DD2C1D; color: white"
@@ -121,7 +128,7 @@ const handleNotificationClick = (notification: Notification) => {
 
       <!-- Notifications List -->
       <div class="space-y-3">
-        <div 
+        <div
           v-if="notifications.length === 0"
           class="text-center py-12"
         >
@@ -138,19 +145,19 @@ const handleNotificationClick = (notification: Notification) => {
           @click="handleNotificationClick(notification)"
           class="rounded-lg p-4 transition-all"
           :class="notification.linkTo ? 'cursor-pointer hover:border-opacity-100' : ''"
-          :style="{ 
-            backgroundColor: notification.read 
-              ? 'rgba(14, 36, 70, 0.3)' 
+          :style="{
+            backgroundColor: notification.read
+              ? 'rgba(14, 36, 70, 0.3)'
               : 'rgba(0, 77, 100, 0.5)',
-            border: notification.read 
-              ? '1px solid rgba(65, 185, 195, 0.1)' 
+            border: notification.read
+              ? '1px solid rgba(65, 185, 195, 0.1)'
               : '1px solid rgba(65, 185, 195, 0.3)'
           }"
         >
           <div class="flex items-start gap-4">
             <div class="flex-shrink-0 mt-1">
-              <component 
-                :is="getIcon(notification.type).component" 
+              <component
+                :is="getIcon(notification.type).component"
                 class="w-5 h-5"
                 :style="{ color: getIcon(notification.type).color }"
               />
@@ -189,13 +196,13 @@ const handleNotificationClick = (notification: Notification) => {
     </div>
 
     <!-- Notification Settings -->
-    <div 
+    <div
       class="backdrop-blur-sm rounded-xl p-6 border"
       style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
     >
       <h2 class="text-white mb-4">Notification Settings</h2>
       <div class="space-y-3">
-        <div 
+        <div
           class="flex items-center justify-between p-4 rounded-lg"
           style="background-color: rgba(14, 36, 70, 0.5)"
         >
@@ -206,12 +213,12 @@ const handleNotificationClick = (notification: Notification) => {
             </p>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" checked />
+            <input type="checkbox" v-model="notificationSettings.missionAlerts" />
             <span class="toggle-slider"></span>
           </label>
         </div>
 
-        <div 
+        <div
           class="flex items-center justify-between p-4 rounded-lg"
           style="background-color: rgba(14, 36, 70, 0.5)"
         >
@@ -222,12 +229,12 @@ const handleNotificationClick = (notification: Notification) => {
             </p>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" checked />
+            <input type="checkbox" v-model="notificationSettings.systemWarnings" />
             <span class="toggle-slider"></span>
           </label>
         </div>
 
-        <div 
+        <div
           class="flex items-center justify-between p-4 rounded-lg"
           style="background-color: rgba(14, 36, 70, 0.5)"
         >
@@ -238,12 +245,12 @@ const handleNotificationClick = (notification: Notification) => {
             </p>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" checked />
+            <input type="checkbox" v-model="notificationSettings.networkStatus" />
             <span class="toggle-slider"></span>
           </label>
         </div>
 
-        <div 
+        <div
           class="flex items-center justify-between p-4 rounded-lg"
           style="background-color: rgba(14, 36, 70, 0.5)"
         >
@@ -254,7 +261,7 @@ const handleNotificationClick = (notification: Notification) => {
             </p>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" />
+            <input type="checkbox" v-model="notificationSettings.softwareUpdates" />
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -262,4 +269,3 @@ const handleNotificationClick = (notification: Notification) => {
     </div>
   </div>
 </template>
-

@@ -1,118 +1,522 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { Calendar, Clock, Settings, Save, Copy, AlertTriangle, ChevronDown, ChevronUp, Database, MapPin, Camera, Image, Battery, Zap } from 'lucide-vue-next'
-import type { CameraSettings, Duration, Timelapse, Mission } from '../types'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { Settings, Save, Copy, AlertTriangle, ChevronDown, ChevronUp, Camera as CameraIcon, Lightbulb, Database as DatabaseIcon, Battery, ArrowDown, Anchor, ArrowUp, Radio, X } from 'lucide-vue-next'
+import type { Screen } from '../types'
 
-const missionName = ref('Mission II')
-const showAdvanced = ref(false)
-const showBatteryPlanning = ref(false)
-const startTrigger = ref<'time' | 'manual' | 'depth'>('manual')
-const endTrigger = ref<'time' | 'duration' | 'depth'>('duration')
-const timelapse = ref<Timelapse>({ enabled: true, interval: 60 })
-const duration = ref<Duration>({ value: 60, unit: 'seconds' })
-const lightingBrightness = ref(75)
-const cameraSettings = ref<CameraSettings>({
-  resolution: '4K',
-  frameRate: 30,
-  focus: 'auto'
+const props = withDefaults(defineProps<{
+  releaseWeightBy: 'datetime' | 'elapsed'
+  initialConfiguration?: string
+}>(), {
+  initialConfiguration: ''
 })
+
+const emit = defineEmits<{
+  navigate: [screen: Screen]
+  'update:releaseWeightBy': [value: 'datetime' | 'elapsed']
+}>()
+
+const diveName = ref('Dive II')
+const selectedConfiguration = ref(props.initialConfiguration || '')
+const estimatedDepth = ref('')
 const warnings = ref<string[]>([])
-
-const calculateBatteryUsage = computed(() => {
-  let durationInHours = duration.value.value
-  if (duration.value.unit === 'seconds') durationInHours = duration.value.value / 3600
-  if (duration.value.unit === 'minutes') durationInHours = duration.value.value / 60
-
-  const basePower = 2
-  let cameraPower = 3
-  if (cameraSettings.value.resolution === '4K') cameraPower = 5
-  if (cameraSettings.value.resolution === '2.7K') cameraPower = 4
-  if (cameraSettings.value.frameRate === 60) cameraPower *= 1.3
-
-  const lightingPower = (lightingBrightness.value / 100) * 15
-  const timelapsePower = timelapse.value.enabled ? 0.5 : 0
-  const sensorPower = 1.5
-  const totalPower = basePower + cameraPower + lightingPower + timelapsePower + sensorPower
-  const batteryCapacity = 100
-  const batteryLife = batteryCapacity / totalPower
-  const batteryUsagePercent = Math.min((durationInHours / batteryLife) * 100, 100)
-
-  return {
-    basePower,
-    cameraPower,
-    lightingPower,
-    timelapsePower,
-    sensorPower,
-    totalPower,
-    batteryLife,
-    batteryUsagePercent,
-    durationInHours
-  }
-})
-
-const previousMissions = ref<Mission[]>([
-  { id: 1, name: 'Deep Sea Survey 2024-01', date: 'Jan 5, 2026', duration: '3h 45m', location: '41.7128° N, 74.0060° W', maxDepth: 125, images: 487, videos: 3, status: 'completed' },
-  { id: 2, name: 'Coral Reef Documentation', date: 'Jan 2, 2026', duration: '2h 18m', location: '25.7617° N, 80.1918° W', maxDepth: 45, images: 324, videos: 5, status: 'completed' },
-  { id: 3, name: 'Kelp Forest Study', date: 'Dec 28, 2025', duration: '4h 12m', location: '36.6002° N, 121.8947° W', maxDepth: 78, images: 612, videos: 7, status: 'completed' },
-  { id: 4, name: 'Shipwreck Investigation', date: 'Dec 20, 2025', duration: '5h 30m', location: '42.3601° N, 71.0589° W', maxDepth: 156, images: 893, videos: 12, status: 'completed' },
-  { id: 5, name: 'Bioluminescence Survey', date: 'Dec 15, 2025', duration: '6h 05m', location: '32.7157° N, 117.1611° W', maxDepth: 98, images: 1247, videos: 8, status: 'completed' }
+const showBatteryPlanning = ref(false)
+const showSaveModal = ref(false)
+const configurationName = ref('')
+const hasUnsavedChanges = ref(false)
+const showNavigationWarning = ref(false)
+const pendingConfigurationChange = ref('')
+const savedConfigurations = ref([
+  'DORIS 24 Hour Dive Configuration',
+  'DORIS 12 Hour Dive Configuration',
+  'DORIS 6 Hour Dive Configuration',
+  'DORIS 4 Hour Dive Configuration',
+  'Release Date Time Test',
+  'My Saved Configuration 1',
+  'My Saved Configuration 2',
+  'My Saved Configuration 3',
+  'My Saved Configuration 4',
+  'My Saved Configuration 5'
 ])
 
-const handleSaveMission = () => {
-  const newWarnings: string[] = []
-  if (duration.value.value < 30 && duration.value.unit === 'seconds') {
-    newWarnings.push('Mission duration is very short. Consider extending the duration.')
-  }
-  if (lightingBrightness.value < 50) {
-    newWarnings.push('Low lighting brightness may affect video quality in deep water.')
-  }
-  warnings.value = newWarnings
+const showBrightnessWarning = ref(false)
+const pendingBrightness = ref<{ value: number; phase: 'descent' | 'bottom' | 'ascent' } | null>(null)
+
+// Descent settings
+const descentCameraOn = ref(false)
+const descentCameraType = ref<'continuous-video' | 'timelapse' | 'video-interval'>('continuous-video')
+const descentVideoRecordNumber = ref('10')
+const descentVideoRecordUnit = ref('seconds')
+const descentVideoPauseNumber = ref('5')
+const descentVideoPauseUnit = ref('seconds')
+const descentResolution = ref('4K')
+const descentImageType = ref('High-Rez JPG')
+const descentFileFormat = ref('JPEG')
+const descentVideoFileFormat = ref('.MP4')
+const descentFrameRate = ref(30)
+const descentCaptureFrequency = ref(10)
+const descentCaptureFrequencyUnit = ref('seconds')
+const descentFocus = ref('auto')
+const descentSleepTimerNumber = ref('')
+const descentSleepTimerUnit = ref('hours')
+const descentSleepTimerEnabled = ref(false)
+const descentAdvancedOpen = ref(false)
+const descentISO = ref('auto')
+const descentWhiteBalance = ref('auto')
+const descentExposure = ref('0')
+const descentSharpness = ref('medium')
+const descentLightOn = ref(false)
+const descentLightMode = ref<'continuous' | 'interval'>('continuous')
+const descentLightOnNumber = ref('10')
+const descentLightOnUnit = ref('seconds')
+const descentLightOffNumber = ref('5')
+const descentLightOffUnit = ref('seconds')
+const descentLightBrightness = ref(75)
+const descentMatchCameraInterval = ref(false)
+
+// On Bottom settings
+const bottomCameraOn = ref(true)
+const bottomCameraDelayNumber = ref('30')
+const bottomCameraDelayUnit = ref('seconds')
+const bottomCameraType = ref<'continuous-video' | 'timelapse' | 'video-interval'>('continuous-video')
+const bottomVideoRecordNumber = ref('10')
+const bottomVideoRecordUnit = ref('seconds')
+const bottomVideoPauseNumber = ref('5')
+const bottomVideoPauseUnit = ref('seconds')
+const bottomResolution = ref('4K')
+const bottomImageType = ref('High-Rez JPG')
+const bottomFileFormat = ref('JPEG')
+const bottomVideoFileFormat = ref('.MP4')
+const bottomFrameRate = ref(30)
+const bottomCaptureFrequency = ref(10)
+const bottomCaptureFrequencyUnit = ref('seconds')
+const bottomFocus = ref('auto')
+const bottomSleepTimerNumber = ref('')
+const bottomSleepTimerUnit = ref('hours')
+const bottomSleepTimerEnabled = ref(false)
+const bottomAdvancedOpen = ref(false)
+const bottomISO = ref('auto')
+const bottomWhiteBalance = ref('auto')
+const bottomExposure = ref('0')
+const bottomSharpness = ref('medium')
+const bottomLightOn = ref(true)
+const bottomLightDelayNumber = ref('30')
+const bottomLightDelayUnit = ref('seconds')
+const bottomLightMode = ref<'continuous' | 'interval'>('continuous')
+const bottomLightOnNumber = ref('10')
+const bottomLightOnUnit = ref('seconds')
+const bottomLightOffNumber = ref('5')
+const bottomLightOffUnit = ref('seconds')
+const bottomLightBrightness = ref(75)
+const bottomMatchCameraInterval = ref(false)
+
+// Ascent settings
+const ascentSameAsDescent = ref(false)
+const releaseWeightDate = ref('2026-02-02')
+const releaseWeightTime = ref('12:00')
+const releaseWeightElapsedNumber = ref('6')
+const releaseWeightElapsedUnit = ref('hours')
+const ascentCameraOn = ref(false)
+const ascentCameraType = ref<'continuous-video' | 'timelapse' | 'video-interval'>('continuous-video')
+const ascentVideoRecordNumber = ref('10')
+const ascentVideoRecordUnit = ref('seconds')
+const ascentVideoPauseNumber = ref('5')
+const ascentVideoPauseUnit = ref('seconds')
+const ascentResolution = ref('4K')
+const ascentImageType = ref('High-Rez JPG')
+const ascentFileFormat = ref('JPEG')
+const ascentVideoFileFormat = ref('.MP4')
+const ascentFrameRate = ref(30)
+const ascentCaptureFrequency = ref(10)
+const ascentCaptureFrequencyUnit = ref('seconds')
+const ascentFocus = ref('auto')
+const ascentSleepTimerNumber = ref('')
+const ascentSleepTimerUnit = ref('hours')
+const ascentSleepTimerEnabled = ref(false)
+const ascentAdvancedOpen = ref(false)
+const ascentISO = ref('auto')
+const ascentWhiteBalance = ref('auto')
+const ascentExposure = ref('0')
+const ascentSharpness = ref('medium')
+const ascentLightOn = ref(false)
+const ascentLightMode = ref<'continuous' | 'interval'>('continuous')
+const ascentLightOnNumber = ref('10')
+const ascentLightOnUnit = ref('seconds')
+const ascentLightOffNumber = ref('5')
+const ascentLightOffUnit = ref('seconds')
+const ascentLightBrightness = ref(75)
+const ascentMatchCameraInterval = ref(false)
+
+// Recovery settings
+const activateMastLight = ref(false)
+const updateFrequency = ref('5min')
+const useIridium = ref(false)
+const useLoRA = ref(false)
+
+const batteryData = computed(() => {
+  const basePower = 2
+  let totalPower = basePower
+  if (descentCameraOn.value || bottomCameraOn.value || ascentCameraOn.value) totalPower += 5
+  if (descentLightOn.value || bottomLightOn.value || ascentLightOn.value) totalPower += 10
+  totalPower += 1.5
+  const batteryCapacity = 100
+  const batteryLife = batteryCapacity / totalPower
+  const diveDuration = 6
+  const batteryUsagePercent = Math.min((diveDuration / batteryLife) * 100, 100)
+  return { basePower, totalPower, batteryLife, batteryUsagePercent, diveDuration }
+})
+
+const descentCaptureFrequencyTooLow = computed(() => {
+  const totalHours = descentCaptureFrequencyUnit.value === 'hours'
+    ? descentCaptureFrequency.value
+    : descentCaptureFrequencyUnit.value === 'minutes'
+    ? descentCaptureFrequency.value / 60
+    : descentCaptureFrequency.value / 3600
+  return totalHours > 1
+})
+
+const releaseWeightWarning = computed(() => {
+  const totalMinutes = releaseWeightElapsedUnit.value === 'hours'
+    ? Number(releaseWeightElapsedNumber.value) * 60
+    : releaseWeightElapsedUnit.value === 'minutes'
+    ? Number(releaseWeightElapsedNumber.value)
+    : Number(releaseWeightElapsedNumber.value) / 60
+  if (totalMinutes < 20) return { show: true, title: 'Release Time Too Short', message: 'Release time should be at least 20 minutes to ensure proper dive duration.' }
+  if (totalMinutes > 1200) return { show: true, title: 'Release Time Too Long', message: 'Release time exceeds 20 hours. Consider if this extended duration is necessary for mission objectives.' }
+  return { show: false, title: '', message: '' }
+})
+
+function isDelayTooLong(number: string, unit: string): boolean {
+  const totalHours = unit === 'hours' ? Number(number) : unit === 'minutes' ? Number(number) / 60 : Number(number) / 3600
+  return totalHours > 4
 }
 
-const getTriggerStyle = (isActive: boolean) => {
-  if (isActive) {
-    return { background: 'linear-gradient(135deg, #41B9C3 0%, #187D8B 100%)', border: '1px solid #41B9C3', color: 'white' }
-  }
-  return { backgroundColor: 'rgba(14, 36, 70, 0.5)', border: '1px solid rgba(65, 185, 195, 0.3)', color: '#96EEF2' }
+function isRecordTooLong(number: string, unit: string): boolean {
+  const totalHours = unit === 'hours' ? Number(number) : unit === 'minutes' ? Number(number) / 60 : Number(number) / 3600
+  return totalHours > 4
 }
+
+watch(() => props.initialConfiguration, (val) => {
+  if (val) selectedConfiguration.value = val
+})
+
+watch([selectedConfiguration, diveName, descentCameraOn, descentCameraType, descentResolution, descentCaptureFrequency,
+  descentLightOn, descentLightMode, descentLightBrightness, bottomCameraOn, bottomCameraType, bottomResolution,
+  bottomCaptureFrequency, bottomLightOn, bottomLightMode, bottomLightBrightness, ascentCameraOn, ascentCameraType,
+  ascentResolution, ascentCaptureFrequency, ascentLightOn, ascentLightMode, ascentLightBrightness,
+  activateMastLight, updateFrequency, useIridium, useLoRA, releaseWeightElapsedNumber
+], () => {
+  if (selectedConfiguration.value === 'New Configuration') {
+    hasUnsavedChanges.value = true
+  }
+})
+
+function resetToDefaults() {
+  diveName.value = 'Dive II'
+  selectedConfiguration.value = 'New Configuration'
+  warnings.value = []
+  hasUnsavedChanges.value = false
+  descentCameraOn.value = false
+  descentCameraType.value = 'continuous-video'
+  descentVideoRecordNumber.value = '10'
+  descentVideoRecordUnit.value = 'seconds'
+  descentVideoPauseNumber.value = '5'
+  descentVideoPauseUnit.value = 'seconds'
+  descentResolution.value = '4K'
+  descentImageType.value = 'High-Rez JPG'
+  descentFileFormat.value = 'JPEG'
+  descentVideoFileFormat.value = '.MP4'
+  descentFrameRate.value = 30
+  descentCaptureFrequency.value = 10
+  descentCaptureFrequencyUnit.value = 'seconds'
+  descentFocus.value = 'auto'
+  descentAdvancedOpen.value = false
+  descentISO.value = 'auto'
+  descentWhiteBalance.value = 'auto'
+  descentExposure.value = '0'
+  descentSharpness.value = 'medium'
+  descentLightOn.value = false
+  descentLightMode.value = 'continuous'
+  descentLightOnNumber.value = '10'
+  descentLightOnUnit.value = 'seconds'
+  descentLightOffNumber.value = '5'
+  descentLightOffUnit.value = 'seconds'
+  descentLightBrightness.value = 75
+  descentMatchCameraInterval.value = false
+  bottomCameraOn.value = true
+  bottomCameraDelayNumber.value = '30'
+  bottomCameraDelayUnit.value = 'seconds'
+  bottomCameraType.value = 'continuous-video'
+  bottomVideoRecordNumber.value = '10'
+  bottomVideoRecordUnit.value = 'seconds'
+  bottomVideoPauseNumber.value = '5'
+  bottomVideoPauseUnit.value = 'seconds'
+  bottomResolution.value = '4K'
+  bottomImageType.value = 'High-Rez JPG'
+  bottomFileFormat.value = 'JPEG'
+  bottomVideoFileFormat.value = '.MP4'
+  bottomFrameRate.value = 30
+  bottomCaptureFrequency.value = 10
+  bottomCaptureFrequencyUnit.value = 'seconds'
+  bottomFocus.value = 'auto'
+  bottomAdvancedOpen.value = false
+  bottomISO.value = 'auto'
+  bottomWhiteBalance.value = 'auto'
+  bottomExposure.value = '0'
+  bottomSharpness.value = 'medium'
+  bottomLightOn.value = true
+  bottomLightDelayNumber.value = '30'
+  bottomLightDelayUnit.value = 'seconds'
+  bottomLightMode.value = 'continuous'
+  bottomLightOnNumber.value = '10'
+  bottomLightOnUnit.value = 'seconds'
+  bottomLightOffNumber.value = '5'
+  bottomLightOffUnit.value = 'seconds'
+  bottomLightBrightness.value = 75
+  bottomMatchCameraInterval.value = false
+  ascentSameAsDescent.value = false
+  emit('update:releaseWeightBy', 'elapsed')
+  releaseWeightDate.value = '2026-02-02'
+  releaseWeightTime.value = '12:00'
+  releaseWeightElapsedNumber.value = '6'
+  releaseWeightElapsedUnit.value = 'hours'
+  ascentCameraOn.value = false
+  ascentCameraType.value = 'continuous-video'
+  ascentVideoRecordNumber.value = '10'
+  ascentVideoRecordUnit.value = 'seconds'
+  ascentVideoPauseNumber.value = '5'
+  ascentVideoPauseUnit.value = 'seconds'
+  ascentResolution.value = '4K'
+  ascentImageType.value = 'High-Rez JPG'
+  ascentFileFormat.value = 'JPEG'
+  ascentVideoFileFormat.value = '.MP4'
+  ascentFrameRate.value = 30
+  ascentCaptureFrequency.value = 10
+  ascentCaptureFrequencyUnit.value = 'seconds'
+  ascentFocus.value = 'auto'
+  ascentAdvancedOpen.value = false
+  ascentISO.value = 'auto'
+  ascentWhiteBalance.value = 'auto'
+  ascentExposure.value = '0'
+  ascentSharpness.value = 'medium'
+  ascentLightOn.value = false
+  ascentLightMode.value = 'continuous'
+  ascentLightOnNumber.value = '10'
+  ascentLightOnUnit.value = 'seconds'
+  ascentLightOffNumber.value = '5'
+  ascentLightOffUnit.value = 'seconds'
+  ascentLightBrightness.value = 75
+  ascentMatchCameraInterval.value = false
+  activateMastLight.value = false
+  updateFrequency.value = '5min'
+  useIridium.value = false
+  useLoRA.value = false
+}
+
+function generateNextConfigName(baseName: string): string {
+  const match = baseName.match(/^(.*?)(\d+)?$/)
+  if (!match) return `${baseName} 2`
+  const base = match[1].trim()
+  const currentNumber = match[2] ? parseInt(match[2]) : 1
+  let checkNumber = currentNumber + 1
+  let proposedName = `${base} ${checkNumber}`
+  while (savedConfigurations.value.includes(proposedName)) {
+    checkNumber++
+    proposedName = `${base} ${checkNumber}`
+  }
+  return proposedName
+}
+
+function handleSaveConfiguration() {
+  if (configurationName.value.trim()) {
+    savedConfigurations.value.push(configurationName.value.trim())
+    configurationName.value = ''
+    showSaveModal.value = false
+    hasUnsavedChanges.value = false
+    if (pendingConfigurationChange.value) {
+      selectedConfiguration.value = pendingConfigurationChange.value
+      if (pendingConfigurationChange.value === 'New Configuration') resetToDefaults()
+      pendingConfigurationChange.value = ''
+      showNavigationWarning.value = false
+    }
+  }
+}
+
+function handleDiscardChanges() {
+  hasUnsavedChanges.value = false
+  showNavigationWarning.value = false
+  if (pendingConfigurationChange.value) {
+    selectedConfiguration.value = pendingConfigurationChange.value
+    if (pendingConfigurationChange.value === 'New Configuration') resetToDefaults()
+    pendingConfigurationChange.value = ''
+  }
+}
+
+function handleCancelNavigation() {
+  showNavigationWarning.value = false
+  pendingConfigurationChange.value = ''
+}
+
+function handleOpenSaveModal() {
+  showSaveModal.value = true
+  configurationName.value = ''
+}
+
+function handleConfigurationChange(value: string) {
+  if (hasUnsavedChanges.value && selectedConfiguration.value === 'New Configuration' && value !== selectedConfiguration.value) {
+    pendingConfigurationChange.value = value
+    showNavigationWarning.value = true
+  } else {
+    selectedConfiguration.value = value
+    if (value === 'New Configuration') resetToDefaults()
+    if (value === 'Release Date Time Test') {
+      emit('update:releaseWeightBy', 'datetime')
+    } else if (value !== '') {
+      emit('update:releaseWeightBy', 'elapsed')
+    }
+  }
+}
+
+function handleBrightnessChange(value: number, phase: 'descent' | 'bottom' | 'ascent') {
+  const currentBrightness = phase === 'descent' ? descentLightBrightness.value
+    : phase === 'bottom' ? bottomLightBrightness.value
+    : ascentLightBrightness.value
+  if (value < 75 && currentBrightness >= 75) {
+    pendingBrightness.value = { value, phase }
+    showBrightnessWarning.value = true
+  } else {
+    if (phase === 'descent') descentLightBrightness.value = value
+    else if (phase === 'bottom') bottomLightBrightness.value = value
+    else ascentLightBrightness.value = value
+    hasUnsavedChanges.value = true
+  }
+}
+
+function confirmBrightnessChange() {
+  if (pendingBrightness.value) {
+    const { value, phase } = pendingBrightness.value
+    if (phase === 'descent') descentLightBrightness.value = value
+    else if (phase === 'bottom') bottomLightBrightness.value = value
+    else ascentLightBrightness.value = value
+    hasUnsavedChanges.value = true
+  }
+  showBrightnessWarning.value = false
+  pendingBrightness.value = null
+}
+
+function cancelBrightnessChange() {
+  showBrightnessWarning.value = false
+  pendingBrightness.value = null
+}
+
+function handleDescentCameraToggle(checked: boolean) {
+  descentCameraOn.value = checked
+  descentLightOn.value = checked
+  hasUnsavedChanges.value = true
+}
+
+function handleBottomCameraToggle(checked: boolean) {
+  bottomCameraOn.value = checked
+  bottomLightOn.value = checked
+}
+
+function handleAscentCameraToggle(checked: boolean) {
+  ascentCameraOn.value = checked
+  ascentLightOn.value = checked
+}
+
+function handleOverwriteSave() {
+  configurationName.value = ''
+  showSaveModal.value = false
+  hasUnsavedChanges.value = false
+  if (pendingConfigurationChange.value) {
+    selectedConfiguration.value = pendingConfigurationChange.value
+    if (pendingConfigurationChange.value === 'New Configuration') resetToDefaults()
+    pendingConfigurationChange.value = ''
+    showNavigationWarning.value = false
+  }
+}
+
+function handleSaveAsNew() {
+  const nextName = generateNextConfigName(selectedConfiguration.value)
+  configurationName.value = nextName
+}
+
+function resetDescentCameraDefaults() {
+  descentResolution.value = '4K'
+  descentImageType.value = 'High-Rez JPG'
+  descentFileFormat.value = 'JPEG'
+  descentFrameRate.value = 30
+  descentCaptureFrequency.value = 10
+  descentCaptureFrequencyUnit.value = 'seconds'
+  descentFocus.value = 'auto'
+  descentISO.value = 'auto'
+  descentWhiteBalance.value = 'auto'
+  descentExposure.value = '0'
+  descentSharpness.value = 'medium'
+  hasUnsavedChanges.value = true
+}
+
+function resetBottomCameraDefaults() {
+  bottomResolution.value = '4K'
+  bottomImageType.value = 'High-Rez JPG'
+  bottomFileFormat.value = 'JPEG'
+  bottomFrameRate.value = 30
+  bottomCaptureFrequency.value = 10
+  bottomCaptureFrequencyUnit.value = 'seconds'
+  bottomFocus.value = 'auto'
+  bottomISO.value = 'auto'
+  bottomWhiteBalance.value = 'auto'
+  bottomExposure.value = '0'
+  bottomSharpness.value = 'medium'
+  hasUnsavedChanges.value = true
+}
+
+function resetAscentCameraDefaults() {
+  ascentResolution.value = '4K'
+  ascentImageType.value = 'High-Rez JPG'
+  ascentFileFormat.value = 'JPEG'
+  ascentFrameRate.value = 30
+  ascentCaptureFrequency.value = 10
+  ascentCaptureFrequencyUnit.value = 'seconds'
+  ascentFocus.value = 'auto'
+  ascentISO.value = 'auto'
+  ascentWhiteBalance.value = 'auto'
+  ascentExposure.value = '0'
+  ascentSharpness.value = 'medium'
+  hasUnsavedChanges.value = true
+}
+
+function handleBeforeUnload(e: BeforeUnloadEvent) {
+  if (hasUnsavedChanges.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
+
+const inputStyle = "background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
+const phaseStyle = "background-color: rgba(14, 36, 70, 0.3); border: 1px solid rgba(65, 185, 195, 0.2)"
 </script>
 
 <template>
   <div class="max-w-6xl mx-auto px-4 py-6 md:py-8">
-    <div 
-      class="backdrop-blur-sm rounded-xl p-6 border"
-      style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
-    >
-      <div class="flex items-center justify-between mb-6">
+    <div class="backdrop-blur-sm rounded-xl p-6 border" style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)">
+      <div class="mb-6">
         <h1 class="text-white text-2xl flex items-center gap-2">
           <Settings class="w-6 h-6" style="color: #96EEF2" />
-          Mission Programming
+          Deployment Configuration
         </h1>
-        <div class="flex gap-2 flex-shrink-0">
-          <button 
-            class="px-4 py-2 rounded-lg transition-all flex items-center gap-2"
-            style="background-color: rgba(14, 36, 70, 0.5); color: #96EEF2; border: 1px solid rgba(65, 185, 195, 0.3)"
-          >
-            <Copy class="w-4 h-4" />
-            <span class="hidden sm:inline">Copy</span>
-          </button>
-          <button 
-            @click="handleSaveMission"
-            class="px-4 py-2 text-white rounded-lg transition-all flex items-center gap-2 hover:opacity-90"
-            style="background: linear-gradient(135deg, #41B9C3 0%, #187D8B 100%)"
-          >
-            <Save class="w-4 h-4" />
-            <span class="hidden sm:inline">Save Mission</span>
-          </button>
-        </div>
       </div>
 
       <!-- Warnings -->
-      <div 
-        v-if="warnings.length > 0"
-        class="rounded-lg p-4 mb-6"
-        style="background-color: rgba(255, 153, 55, 0.1); border: 1px solid rgba(255, 153, 55, 0.3)"
-      >
+      <div v-if="warnings.length > 0" class="rounded-lg p-4 mb-6" style="background-color: rgba(255, 153, 55, 0.1); border: 1px solid rgba(255, 153, 55, 0.3)">
         <div class="flex items-start gap-3">
           <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #FF9937" />
           <div>
@@ -124,436 +528,1073 @@ const getTriggerStyle = (isActive: boolean) => {
         </div>
       </div>
 
-      <!-- Mission Name -->
+      <!-- Configuration Profile -->
       <div class="mb-6">
-        <label class="block mb-2" style="color: #96EEF2">Mission Name</label>
-        <input
-          type="text"
-          v-model="missionName"
-          class="w-full px-4 py-3 text-white rounded-lg focus:outline-none"
-          style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-        />
+        <label class="block mb-2" style="color: #96EEF2">Load Configuration</label>
+        <select :value="selectedConfiguration" @change="handleConfigurationChange(($event.target as HTMLSelectElement).value)" class="w-full px-4 py-3 text-white rounded-lg focus:outline-none mb-3" :style="inputStyle">
+          <option value="">-- Select Configuration --</option>
+          <option value="New Configuration">New Configuration</option>
+          <option v-for="(config, index) in savedConfigurations" :key="index" :value="config">{{ config }}</option>
+        </select>
       </div>
 
-      <!-- Start Trigger -->
-      <div class="mb-6">
-        <label class="block mb-3" style="color: #96EEF2">Start Trigger</label>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <button
-            @click="startTrigger = 'manual'"
-            class="p-4 rounded-lg transition-all"
-            :style="getTriggerStyle(startTrigger === 'manual')"
-          >
-            Manual Start
-          </button>
-          <button
-            @click="startTrigger = 'time'"
-            class="p-4 rounded-lg transition-all"
-            :style="getTriggerStyle(startTrigger === 'time')"
-          >
-            <Calendar class="w-5 h-5 mx-auto mb-1" />
-            By Time/Date
-          </button>
-          <button
-            @click="startTrigger = 'depth'"
-            class="p-4 rounded-lg transition-all"
-            :style="getTriggerStyle(startTrigger === 'depth')"
-          >
-            By Depth
-          </button>
-        </div>
-      </div>
+      <!-- ==================== DESCENT SECTION ==================== -->
+      <div class="mb-6 p-6 rounded-lg" :style="phaseStyle">
+        <h2 class="text-white text-xl mb-2 flex items-center gap-2">
+          <ArrowDown class="w-5 h-5" style="color: #96EEF2" />
+          Descent
+        </h2>
+        <p class="text-sm mb-6" style="color: rgba(150, 238, 242, 0.7)">
+          Settings for camera, lighting, and data gathering during descent. Descent phase begins when DORIS detects it has been placed in the water. These settings will update to On Bottom programming when the seafloor is reached.
+        </p>
 
-      <!-- Timelapse Photo -->
-      <div class="mb-6">
-        <div class="flex items-center justify-between mb-3">
-          <label style="color: #96EEF2">Timelapse Photo</label>
-          <label class="toggle-switch">
-            <input type="checkbox" v-model="timelapse.enabled" />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
+        <!-- Descent Camera -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+              <CameraIcon class="w-4 h-4" style="color: #41B9C3" />
+              Camera
+            </h3>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" :checked="descentCameraOn" @change="handleDescentCameraToggle(($event.target as HTMLInputElement).checked)" class="sr-only peer" />
+              <div class="w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" :style="{ backgroundColor: descentCameraOn ? '#41B9C3' : 'rgba(65, 185, 195, 0.3)' }"></div>
+              <span class="ml-3 text-sm" style="color: #96EEF2">{{ descentCameraOn ? 'On' : 'Off' }}</span>
+            </label>
+          </div>
 
-        <div 
-          v-if="timelapse.enabled"
-          class="p-4 rounded-lg"
-          style="background-color: rgba(14, 36, 70, 0.3)"
-        >
-          <label class="block text-sm mb-2" style="color: #96EEF2">Capture every (seconds)</label>
-          <input
-            type="number"
-            v-model="timelapse.interval"
-            class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-            style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-          />
-        </div>
-      </div>
-
-      <!-- End Trigger -->
-      <div class="mb-6">
-        <label class="block mb-3" style="color: #96EEF2">End Trigger</label>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-          <button
-            @click="endTrigger = 'duration'"
-            class="p-4 rounded-lg transition-all"
-            :style="getTriggerStyle(endTrigger === 'duration')"
-          >
-            <Clock class="w-5 h-5 mx-auto mb-1" />
-            After Duration
-          </button>
-          <button
-            @click="endTrigger = 'time'"
-            class="p-4 rounded-lg transition-all"
-            :style="getTriggerStyle(endTrigger === 'time')"
-          >
-            By Time/Date
-          </button>
-          <button
-            @click="endTrigger = 'depth'"
-            class="p-4 rounded-lg transition-all"
-            :style="getTriggerStyle(endTrigger === 'depth')"
-          >
-            By Depth
-          </button>
-        </div>
-
-        <div 
-          v-if="endTrigger === 'duration'"
-          class="p-4 rounded-lg"
-          style="background-color: rgba(14, 36, 70, 0.3)"
-        >
-          <div class="grid grid-cols-2 gap-4">
+          <div v-if="descentCameraOn" class="space-y-4 pl-6">
             <div>
-              <label class="block text-sm mb-2" style="color: #96EEF2">Duration</label>
-              <input
-                type="number"
-                v-model="duration.value"
-                class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-                style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-              />
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Image Capture Type</label>
+              <div class="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="continuous-video" v-model="descentCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Continuous Video</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="video-interval" v-model="descentCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Interval Video</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="timelapse" v-model="descentCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Timelapse Images</span>
+                </label>
+              </div>
             </div>
-            <div>
-              <label class="block text-sm mb-2" style="color: #96EEF2">Unit</label>
-              <select
-                v-model="duration.unit"
-                class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-                style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-              >
-                <option value="seconds">Seconds</option>
-                <option value="minutes">Minutes</option>
-                <option value="hours">Hours</option>
-              </select>
+
+            <!-- Timelapse: Capture Frequency -->
+            <div v-if="descentCameraType === 'timelapse'">
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Capture Frequency</label>
+              <div class="flex gap-2">
+                <input type="number" min="1" v-model.number="descentCaptureFrequency" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" />
+                <select v-model="descentCaptureFrequencyUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="seconds">Seconds</option>
+                  <option value="minutes">Minutes</option>
+                  <option value="hours">Hours</option>
+                </select>
+              </div>
+              <div v-if="descentCaptureFrequencyTooLow" class="mt-3 rounded-lg p-4" style="background-color: #0E2446; border: 2px solid #DD2C1D">
+                <div class="flex items-start gap-3">
+                  <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+                  <div class="flex-1">
+                    <h3 class="text-white font-semibold mb-1">Low Frequency Warning</h3>
+                    <p class="text-white text-sm opacity-90">This frequency setting may not capture any images given descent time.</p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Basic Camera & Lighting -->
-      <div class="mb-6">
-        <h2 class="text-white mb-4">Camera & Lighting</h2>
-        
-        <!-- Lighting Brightness -->
-        <div class="mb-4">
-          <label class="block text-sm mb-2" style="color: #96EEF2">
-            Lighting Brightness: {{ lightingBrightness }}%
-          </label>
-          <input
-            type="range"
-            min="50"
-            max="100"
-            v-model="lightingBrightness"
-            class="w-full"
-          />
-          <p class="text-sm mt-2" style="color: #41B9C3">
-            Camera turns on 1 second before lights activate
-          </p>
-        </div>
-
-        <!-- Basic Camera Settings -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-sm mb-2" style="color: #96EEF2">Resolution</label>
-            <select
-              v-model="cameraSettings.resolution"
-              class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-              style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-            >
-              <option value="1080p">1080p</option>
-              <option value="4K">4K</option>
-              <option value="2.7K">2.7K</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm mb-2" style="color: #96EEF2">Frame Rate</label>
-            <select
-              v-model.number="cameraSettings.frameRate"
-              class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-              style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-            >
-              <option :value="24">24 fps</option>
-              <option :value="30">30 fps</option>
-              <option :value="60">60 fps</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm mb-2" style="color: #96EEF2">Focus</label>
-            <select
-              v-model="cameraSettings.focus"
-              class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-              style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-            >
-              <option value="auto">Auto Focus</option>
-              <option value="fixed">Fixed Focus</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <!-- Advanced Settings -->
-      <div class="pt-6" style="border-top: 1px solid rgba(65, 185, 195, 0.2)">
-        <button
-          @click="showAdvanced = !showAdvanced"
-          class="flex items-center gap-2 transition-colors mb-4"
-          style="color: #41B9C3"
-        >
-          <ChevronUp v-if="showAdvanced" class="w-5 h-5" />
-          <ChevronDown v-else class="w-5 h-5" />
-          {{ showAdvanced ? 'Hide' : 'Show' }} Advanced Settings
-        </button>
-
-        <div v-if="showAdvanced" class="space-y-6">
-          <!-- Advanced Camera Settings -->
-          <div class="rounded-lg p-4" style="background-color: rgba(14, 36, 70, 0.3)">
-            <h3 class="text-white mb-4">Advanced Camera Settings</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Interval Video Settings -->
+            <div v-else-if="descentCameraType === 'video-interval'" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <h4 class="text-sm" style="color: #96EEF2">Interval Settings</h4>
               <div>
-                <label class="block text-sm mb-2" style="color: #96EEF2">ISO</label>
-                <select 
-                  class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-                  style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-                >
-                  <option>Auto</option>
-                  <option>100</option>
-                  <option>200</option>
-                  <option>400</option>
-                  <option>800</option>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Record for</label>
+                <div class="flex gap-2">
+                  <input type="number" v-model="descentVideoRecordNumber" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="1" />
+                  <select v-model="descentVideoRecordUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="seconds">seconds</option>
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                  </select>
+                </div>
+                <div v-if="isRecordTooLong(descentVideoRecordNumber, descentVideoRecordUnit)" class="mt-3 rounded-lg p-4" style="background-color: #0E2446; border: 2px solid #DD2C1D">
+                  <div class="flex items-start gap-3">
+                    <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+                    <div class="flex-1">
+                      <h3 class="text-white font-semibold mb-1">Low Frequency Warning</h3>
+                      <p class="text-white text-sm opacity-90">This record duration may not capture sufficient video given descent time.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Pause for</label>
+                <div class="flex gap-2">
+                  <input type="number" v-model="descentVideoPauseNumber" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="1" />
+                  <select v-model="descentVideoPauseUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="seconds">seconds</option>
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                  </select>
+                </div>
+                <div v-if="isRecordTooLong(descentVideoPauseNumber, descentVideoPauseUnit)" class="mt-3 rounded-lg p-4" style="background-color: #0E2446; border: 2px solid #DD2C1D">
+                  <div class="flex items-start gap-3">
+                    <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+                    <div class="flex-1">
+                      <h3 class="text-white font-semibold mb-1">Low Frequency Warning</h3>
+                      <p class="text-white text-sm opacity-90">This pause duration may not capture sufficient video given descent time.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sleep Timer -->
+            <div class="mt-4">
+              <label class="flex items-center gap-2 mb-2 text-sm cursor-pointer" style="color: #96EEF2">
+                <input type="checkbox" v-model="descentSleepTimerEnabled" @change="hasUnsavedChanges = true" class="w-4 h-4 cursor-pointer" style="accent-color: #41B9C3" />
+                Optional: Stop recording and go to sleep after elapsed time of:
+              </label>
+              <div v-if="descentSleepTimerEnabled">
+                <div class="flex gap-2">
+                  <input type="number" v-model="descentSleepTimerNumber" @input="hasUnsavedChanges = true" placeholder="0" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="0" step="0.1" />
+                  <select v-model="descentSleepTimerUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="seconds">seconds</option>
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                  </select>
+                </div>
+                <p class="text-xs mt-1" style="color: rgba(150, 238, 242, 0.7)">Camera will stop recording and enter sleep mode after this duration</p>
+              </div>
+            </div>
+
+            <!-- Camera Settings Toggle -->
+            <button @click="descentAdvancedOpen = !descentAdvancedOpen" class="flex items-center gap-2 px-4 py-2 mt-2 rounded-lg transition-all hover:opacity-80" style="background-color: rgba(65, 185, 195, 0.2); border: 1px solid rgba(65, 185, 195, 0.4); color: #96EEF2">
+              <ChevronUp v-if="descentAdvancedOpen" class="w-5 h-5" />
+              <ChevronDown v-else class="w-5 h-5" />
+              <span class="font-medium">Camera Settings</span>
+            </button>
+
+            <div v-if="descentAdvancedOpen" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <template v-if="descentCameraType !== 'timelapse'">
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Resolution</label>
+                  <select v-model="descentResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="4K">4K</option><option value="2.7K">2.7K</option><option value="1080p">1080p</option><option value="720p">720p</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Frame Rate</label>
+                  <select v-model.number="descentFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option :value="24">24 fps</option><option :value="30">30 fps</option><option :value="60">60 fps</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
+                  <select v-model="descentVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value=".MP4">.MP4</option><option value=".MOV">.MOV</option><option value=".AVI">.AVI</option>
+                  </select>
+                </div>
+              </template>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Focus</label>
+                <select v-model="descentFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="auto">Auto</option><option value="manual">Manual</option>
                 </select>
               </div>
               <div>
-                <label class="block text-sm mb-2" style="color: #96EEF2">White Balance</label>
-                <select 
-                  class="w-full px-4 py-2 text-white rounded-lg focus:outline-none"
-                  style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-                >
-                  <option>Auto</option>
-                  <option>3000K</option>
-                  <option>5500K</option>
-                  <option>6500K</option>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">ISO</label>
+                <select v-model="descentISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="auto">Auto</option><option value="100">100</option><option value="200">200</option><option value="400">400</option><option value="800">800</option><option value="1600">1600</option><option value="3200">3200</option>
+                </select>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">White Balance</label>
+                <select v-model="descentWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="auto">Auto</option><option value="underwater">Underwater</option><option value="3000k">3000K</option><option value="5500k">5500K</option><option value="6500k">6500K</option>
+                </select>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Exposure Compensation</label>
+                <select v-model="descentExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="-2">-2.0</option><option value="-1">-1.0</option><option value="0">0.0</option><option value="+1">+1.0</option><option value="+2">+2.0</option>
+                </select>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Sharpness</label>
+                <select v-model="descentSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                </select>
+              </div>
+              <div v-if="descentCameraType === 'timelapse'">
+                <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
+                <select v-model="descentFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="JPEG">JPEG</option><option value="TIFF">TIFF</option>
+                </select>
+              </div>
+              <button @click="resetDescentCameraDefaults" class="px-4 py-2 text-white rounded-lg transition-all hover:opacity-90" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">
+                Reset to Default Settings
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Descent Light -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+              <Lightbulb class="w-4 h-4" style="color: #41B9C3" />
+              Light
+            </h3>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="descentLightOn" class="sr-only peer" />
+              <div class="w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" :style="{ backgroundColor: descentLightOn ? '#41B9C3' : 'rgba(65, 185, 195, 0.3)' }"></div>
+              <span class="ml-3 text-sm" style="color: #96EEF2">{{ descentLightOn ? 'On' : 'Off' }}</span>
+            </label>
+          </div>
+
+          <div v-if="descentLightOn" class="pl-6">
+            <div v-if="descentCameraOn && (descentCameraType === 'timelapse' || descentCameraType === 'video-interval')" class="mb-4 p-4 rounded-lg" style="background-color: rgba(65, 185, 195, 0.1); border: 1px solid rgba(65, 185, 195, 0.3)">
+              <p class="text-sm" style="color: #96EEF2">
+                You have {{ descentCameraType === 'timelapse' ? 'Timelapse Images' : 'Interval Video' }} selected. Light will automatically {{ descentCameraType === 'timelapse' ? 'strobe to match camera frequency' : 'turn on to match camera frequency' }}.
+              </p>
+            </div>
+            <div v-else class="mb-4">
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Light Mode</label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="continuous" v-model="descentLightMode" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Continuous Light</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="interval" v-model="descentLightMode" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Interval Light</span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="descentLightMode === 'interval' && !(descentCameraOn && (descentCameraType === 'timelapse' || descentCameraType === 'video-interval'))" class="mb-4 p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <h4 class="text-sm" style="color: #96EEF2">Interval Settings</h4>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Light On for</label>
+                <div class="flex gap-2">
+                  <input type="number" v-model="descentLightOnNumber" @input="hasUnsavedChanges = true" :disabled="descentMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (descentMatchCameraInterval ? '0.5' : '1')" min="1" />
+                  <select v-model="descentLightOnUnit" @change="hasUnsavedChanges = true" :disabled="descentMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (descentMatchCameraInterval ? '0.5' : '1')">
+                    <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Light Off for</label>
+                <div class="flex gap-2">
+                  <input type="number" v-model="descentLightOffNumber" @input="hasUnsavedChanges = true" :disabled="descentMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (descentMatchCameraInterval ? '0.5' : '1')" min="1" />
+                  <select v-model="descentLightOffUnit" @change="hasUnsavedChanges = true" :disabled="descentMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (descentMatchCameraInterval ? '0.5' : '1')">
+                    <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <label class="block mb-2 text-sm" style="color: #96EEF2">Light Brightness</label>
+            <input type="range" min="0" max="100" :value="descentLightBrightness" @input="handleBrightnessChange(Number(($event.target as HTMLInputElement).value), 'descent')" class="w-full" />
+            <div class="flex justify-between text-sm mt-1" style="color: #96EEF2">
+              <span>0%</span><span>{{ descentLightBrightness }}%</span><span>100%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Descent Data -->
+        <div class="mb-6">
+          <div class="mb-4">
+            <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+              <DatabaseIcon class="w-4 h-4" style="color: #41B9C3" />
+              Data
+            </h3>
+          </div>
+          <div class="pl-6">
+            <p class="text-sm" style="color: rgba(150, 238, 242, 0.7)">Data collection is always on at the default sampling rate for each sensor. For sensor calibration, go to the Sensors page.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== ON BOTTOM SECTION ==================== -->
+      <div class="mb-6 p-6 rounded-lg" :style="phaseStyle">
+        <h2 class="text-white text-xl mb-2 flex items-center gap-2">
+          <Anchor class="w-5 h-5" style="color: #96EEF2" />
+          On Bottom
+        </h2>
+        <p class="text-sm mb-6" style="color: rgba(150, 238, 242, 0.7)">
+          Settings for camera, lighting, and data gathering during bottom time. Bottom time is determined when the depth value is stable for 1 minute. These settings will automatically update when the weight release is triggered and the Ascent Phase begins.
+        </p>
+
+        <!-- Bottom Camera -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+              <CameraIcon class="w-4 h-4" style="color: #41B9C3" />
+              Camera
+            </h3>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" :checked="bottomCameraOn" @change="handleBottomCameraToggle(($event.target as HTMLInputElement).checked)" class="sr-only peer" />
+              <div class="w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" :style="{ backgroundColor: bottomCameraOn ? '#41B9C3' : 'rgba(65, 185, 195, 0.3)' }"></div>
+              <span class="ml-3 text-sm" style="color: #96EEF2">{{ bottomCameraOn ? 'On' : 'Off' }}</span>
+            </label>
+          </div>
+
+          <div v-if="bottomCameraOn" class="space-y-4 pl-6">
+            <div>
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Delay Camera Start</label>
+              <div class="flex gap-2">
+                <input type="number" v-model="bottomCameraDelayNumber" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="0" />
+                <select v-model="bottomCameraDelayUnit" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                </select>
+              </div>
+              <div v-if="isDelayTooLong(bottomCameraDelayNumber, bottomCameraDelayUnit)" class="mt-3 rounded-lg p-4" style="background-color: #0E2446; border: 2px solid #DD2C1D">
+                <div class="flex items-start gap-3">
+                  <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+                  <div class="flex-1">
+                    <h3 class="text-white font-semibold mb-1">Low Frequency Warning</h3>
+                    <p class="text-white text-sm opacity-90">This delay duration may result in insufficient data capture during bottom time.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Image Capture Type</label>
+              <div class="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="continuous-video" v-model="bottomCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Continuous Video</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="video-interval" v-model="bottomCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Interval Video</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="timelapse" v-model="bottomCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Timelapse Images</span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="bottomCameraType === 'timelapse'">
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Capture Frequency</label>
+              <div class="flex gap-2">
+                <input type="number" min="1" v-model.number="bottomCaptureFrequency" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" />
+                <select v-model="bottomCaptureFrequencyUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="seconds">Seconds</option><option value="minutes">Minutes</option><option value="hours">Hours</option>
                 </select>
               </div>
             </div>
+
+            <div v-else-if="bottomCameraType === 'video-interval'" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <h4 class="text-sm" style="color: #96EEF2">Interval Settings</h4>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Record for</label>
+                <div class="flex gap-2">
+                  <input type="number" v-model="bottomVideoRecordNumber" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="1" />
+                  <select v-model="bottomVideoRecordUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Pause for</label>
+                <div class="flex gap-2">
+                  <input type="number" v-model="bottomVideoPauseNumber" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="1" />
+                  <select v-model="bottomVideoPauseUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sleep Timer -->
+            <div class="mt-4">
+              <label class="flex items-center gap-2 mb-2 text-sm cursor-pointer" style="color: #96EEF2">
+                <input type="checkbox" v-model="bottomSleepTimerEnabled" @change="hasUnsavedChanges = true" class="w-4 h-4 cursor-pointer" style="accent-color: #41B9C3" />
+                Optional: Stop recording and go to sleep after elapsed time of:
+              </label>
+              <div v-if="bottomSleepTimerEnabled">
+                <div class="flex gap-2">
+                  <input type="number" v-model="bottomSleepTimerNumber" @input="hasUnsavedChanges = true" placeholder="0" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="0" step="0.1" />
+                  <select v-model="bottomSleepTimerUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                  </select>
+                </div>
+                <p class="text-xs mt-1" style="color: rgba(150, 238, 242, 0.7)">Camera will stop recording and enter sleep mode after this duration</p>
+              </div>
+            </div>
+
+            <button @click="bottomAdvancedOpen = !bottomAdvancedOpen" class="flex items-center gap-2 px-4 py-2 mt-2 rounded-lg transition-all hover:opacity-80" style="background-color: rgba(65, 185, 195, 0.2); border: 1px solid rgba(65, 185, 195, 0.4); color: #96EEF2">
+              <ChevronUp v-if="bottomAdvancedOpen" class="w-5 h-5" /><ChevronDown v-else class="w-5 h-5" />
+              <span class="font-medium">Camera Settings</span>
+            </button>
+
+            <div v-if="bottomAdvancedOpen" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <template v-if="bottomCameraType !== 'timelapse'">
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Resolution</label>
+                  <select v-model="bottomResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="4K">4K</option><option value="2.7K">2.7K</option><option value="1080p">1080p</option><option value="720p">720p</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Frame Rate</label>
+                  <select v-model.number="bottomFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option :value="24">24 fps</option><option :value="30">30 fps</option><option :value="60">60 fps</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
+                  <select v-model="bottomVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value=".MP4">.MP4</option><option value=".MOV">.MOV</option><option value=".AVI">.AVI</option>
+                  </select>
+                </div>
+              </template>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Focus</label>
+                <select v-model="bottomFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="auto">Auto</option><option value="manual">Manual</option>
+                </select>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">ISO</label>
+                <select v-model="bottomISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="auto">Auto</option><option value="100">100</option><option value="200">200</option><option value="400">400</option><option value="800">800</option><option value="1600">1600</option><option value="3200">3200</option>
+                </select>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">White Balance</label>
+                <select v-model="bottomWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="auto">Auto</option><option value="underwater">Underwater</option><option value="3000k">3000K</option><option value="5500k">5500K</option><option value="6500k">6500K</option>
+                </select>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Exposure Compensation</label>
+                <select v-model="bottomExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="-2">-2.0</option><option value="-1">-1.0</option><option value="0">0.0</option><option value="+1">+1.0</option><option value="+2">+2.0</option>
+                </select>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Sharpness</label>
+                <select v-model="bottomSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                </select>
+              </div>
+              <div v-if="bottomCameraType === 'timelapse'">
+                <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
+                <select v-model="bottomFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="JPEG">JPEG</option><option value="TIFF">TIFF</option>
+                </select>
+              </div>
+              <button @click="resetBottomCameraDefaults" class="px-4 py-2 text-white rounded-lg transition-all hover:opacity-90" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">Reset to Default Settings</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Light -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+              <Lightbulb class="w-4 h-4" style="color: #41B9C3" />
+              Light
+            </h3>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="bottomLightOn" class="sr-only peer" />
+              <div class="w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" :style="{ backgroundColor: bottomLightOn ? '#41B9C3' : 'rgba(65, 185, 195, 0.3)' }"></div>
+              <span class="ml-3 text-sm" style="color: #96EEF2">{{ bottomLightOn ? 'On' : 'Off' }}</span>
+            </label>
           </div>
 
-          <!-- Automated Actions -->
-          <div class="rounded-lg p-4" style="background-color: rgba(14, 36, 70, 0.3)">
-            <h3 class="text-white mb-4">Automated Actions</h3>
+          <div v-if="bottomLightOn" class="space-y-4 pl-6">
+            <div v-if="bottomCameraType !== 'timelapse'">
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Delay Light Start</label>
+              <div class="flex gap-2">
+                <input type="number" v-model="bottomLightDelayNumber" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="0" />
+                <select v-model="bottomLightDelayUnit" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                </select>
+              </div>
+              <div v-if="isDelayTooLong(bottomLightDelayNumber, bottomLightDelayUnit)" class="mt-3 rounded-lg p-4" style="background-color: #0E2446; border: 2px solid #DD2C1D">
+                <div class="flex items-start gap-3">
+                  <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+                  <div class="flex-1">
+                    <h3 class="text-white font-semibold mb-1">Low Frequency Warning</h3>
+                    <p class="text-white text-sm opacity-90">This delay duration may result in insufficient lighting during bottom time.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="bottomCameraOn && (bottomCameraType === 'timelapse' || bottomCameraType === 'video-interval')" class="mb-4 p-4 rounded-lg" style="background-color: rgba(65, 185, 195, 0.1); border: 1px solid rgba(65, 185, 195, 0.3)">
+              <p class="text-sm" style="color: #96EEF2">
+                You have {{ bottomCameraType === 'timelapse' ? 'Timelapse Images' : 'Interval Video' }} selected. Light will automatically {{ bottomCameraType === 'timelapse' ? 'strobe to match camera frequency' : 'turn on to match camera frequency' }}.
+              </p>
+            </div>
+            <div v-else>
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Light Mode</label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="continuous" v-model="bottomLightMode" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Continuous Light</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" value="interval" v-model="bottomLightMode" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Interval Light</span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="bottomLightMode === 'interval' && !(bottomCameraOn && (bottomCameraType === 'timelapse' || bottomCameraType === 'video-interval'))" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <h4 class="text-sm" style="color: #96EEF2">Interval Settings</h4>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Light On for</label>
+                <div class="flex gap-2">
+                  <input type="number" v-model="bottomLightOnNumber" :disabled="bottomMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (bottomMatchCameraInterval ? '0.5' : '1')" min="1" />
+                  <select v-model="bottomLightOnUnit" :disabled="bottomMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (bottomMatchCameraInterval ? '0.5' : '1')">
+                    <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Light Off for</label>
+                <div class="flex gap-2">
+                  <input type="number" v-model="bottomLightOffNumber" :disabled="bottomMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (bottomMatchCameraInterval ? '0.5' : '1')" min="1" />
+                  <select v-model="bottomLightOffUnit" :disabled="bottomMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (bottomMatchCameraInterval ? '0.5' : '1')">
+                    <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Light Brightness</label>
+              <input type="range" min="0" max="100" :value="bottomLightBrightness" @input="handleBrightnessChange(Number(($event.target as HTMLInputElement).value), 'bottom')" class="w-full" />
+              <div class="flex justify-between text-sm mt-1" style="color: #96EEF2">
+                <span>0%</span><span>{{ bottomLightBrightness }}%</span><span>100%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Data -->
+        <div class="mb-6">
+          <div class="mb-4">
+            <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+              <DatabaseIcon class="w-4 h-4" style="color: #41B9C3" />
+              Data
+            </h3>
+          </div>
+          <div class="pl-6">
+            <p class="text-sm" style="color: rgba(150, 238, 242, 0.7)">Data collection is always on at the default sampling rate for each sensor. For sensor calibration, go to the Sensors page.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== ASCENT SECTION ==================== -->
+      <div class="mb-6 p-6 rounded-lg" :style="phaseStyle">
+        <h2 class="text-white text-xl mb-2 flex items-center gap-2">
+          <ArrowUp class="w-5 h-5" style="color: #96EEF2" />
+          Ascent
+        </h2>
+        <p class="text-sm mb-6" style="color: rgba(150, 238, 242, 0.7)">
+          Settings for weight release, and camera, lighting, and data gathering during ascent. Ascent begins when the release begins to burn. Burn can take 20-30 minutes before DORIS leaves the seafloor.
+        </p>
+
+        <!-- Release Weight -->
+        <div class="mb-6">
+          <h3 class="text-white flex items-center gap-2 mb-4">
+            <ArrowUp class="w-4 h-4" style="color: #41B9C3" />
+            Release Weight
+          </h3>
+          <div class="space-y-4 pl-6">
             <div class="space-y-3">
-              <div 
-                class="flex items-center justify-between p-3 rounded-lg"
-                style="background-color: rgba(14, 36, 70, 0.5)"
-              >
-                <span style="color: #96EEF2">Enable sleep mode when idle</span>
-                <label class="toggle-switch">
-                  <input type="checkbox" />
-                  <span class="toggle-slider"></span>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" value="elapsed" :checked="releaseWeightBy === 'elapsed'" @change="emit('update:releaseWeightBy', 'elapsed')" class="w-4 h-4" />
+                <span style="color: #96EEF2">By Elapsed Time from Dive Start</span>
+              </label>
+              <div v-if="releaseWeightBy === 'elapsed'" class="pl-6 space-y-3">
+                <div class="flex gap-2">
+                  <input type="number" v-model="releaseWeightElapsedNumber" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="0" />
+                  <select v-model="releaseWeightElapsedUnit" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                  </select>
+                </div>
+                <div v-if="releaseWeightWarning.show" class="mt-3 rounded-lg p-4" style="background-color: #0E2446; border: 2px solid #DD2C1D">
+                  <div class="flex items-start gap-3">
+                    <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+                    <div class="flex-1">
+                      <h3 class="text-white font-semibold mb-1">{{ releaseWeightWarning.title }}</h3>
+                      <p class="text-white text-sm opacity-90">{{ releaseWeightWarning.message }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" value="datetime" :checked="releaseWeightBy === 'datetime'" @change="emit('update:releaseWeightBy', 'datetime')" class="w-4 h-4" />
+                <span style="color: #96EEF2">By Date/Time</span>
+              </label>
+              <div v-if="releaseWeightBy === 'datetime'" class="pl-6 space-y-3">
+                <div class="rounded-lg p-4" style="background-color: rgba(65, 185, 195, 0.15); border: 1px solid #41B9C3">
+                  <div class="flex items-start gap-3">
+                    <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #41B9C3" />
+                    <div class="flex-1">
+                      <p class="text-white text-sm">Program your date and time variables when you load the Configuration on the Dashboard.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <template v-if="!ascentSameAsDescent">
+          <!-- Ascent Camera -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+                <CameraIcon class="w-4 h-4" style="color: #41B9C3" />
+                Camera
+              </h3>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" :checked="ascentCameraOn" @change="handleAscentCameraToggle(($event.target as HTMLInputElement).checked)" class="sr-only peer" />
+                <div class="w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" :style="{ backgroundColor: ascentCameraOn ? '#41B9C3' : 'rgba(65, 185, 195, 0.3)' }"></div>
+                <span class="ml-3 text-sm" style="color: #96EEF2">{{ ascentCameraOn ? 'On' : 'Off' }}</span>
+              </label>
+            </div>
+
+            <div v-if="ascentCameraOn" class="space-y-4 pl-6">
+              <div>
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Image Capture Type</label>
+                <div class="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" value="continuous-video" v-model="ascentCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                    <span style="color: #96EEF2">Continuous Video</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" value="video-interval" v-model="ascentCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                    <span style="color: #96EEF2">Interval Video</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" value="timelapse" v-model="ascentCameraType" @change="hasUnsavedChanges = true" class="w-4 h-4" />
+                    <span style="color: #96EEF2">Timelapse Images</span>
+                  </label>
+                </div>
+              </div>
+
+              <div v-if="ascentCameraType === 'timelapse'">
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Capture Frequency</label>
+                <div class="flex gap-2">
+                  <input type="number" min="1" v-model.number="ascentCaptureFrequency" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" />
+                  <select v-model="ascentCaptureFrequencyUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="seconds">Seconds</option><option value="minutes">Minutes</option><option value="hours">Hours</option>
+                  </select>
+                </div>
+              </div>
+
+              <div v-else-if="ascentCameraType === 'video-interval'" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+                <h4 class="text-sm" style="color: #96EEF2">Interval Settings</h4>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Record for</label>
+                  <div class="flex gap-2">
+                    <input type="number" v-model="ascentVideoRecordNumber" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="1" />
+                    <select v-model="ascentVideoRecordUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                      <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Pause for</label>
+                  <div class="flex gap-2">
+                    <input type="number" v-model="ascentVideoPauseNumber" @input="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="1" />
+                    <select v-model="ascentVideoPauseUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                      <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sleep Timer -->
+              <div class="mt-4">
+                <label class="flex items-center gap-2 mb-2 text-sm cursor-pointer" style="color: #96EEF2">
+                  <input type="checkbox" v-model="ascentSleepTimerEnabled" @change="hasUnsavedChanges = true" class="w-4 h-4 cursor-pointer" style="accent-color: #41B9C3" />
+                  Optional: Stop recording and go to sleep after elapsed time of:
+                </label>
+                <div v-if="ascentSleepTimerEnabled">
+                  <div class="flex gap-2">
+                    <input type="number" v-model="ascentSleepTimerNumber" @input="hasUnsavedChanges = true" placeholder="0" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle" min="0" step="0.1" />
+                    <select v-model="ascentSleepTimerUnit" @change="hasUnsavedChanges = true" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                      <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                    </select>
+                  </div>
+                  <p class="text-xs mt-1" style="color: rgba(150, 238, 242, 0.7)">Camera will stop recording and enter sleep mode after this duration</p>
+                </div>
+              </div>
+
+              <!-- Same as Descent -->
+              <div class="mt-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" v-model="ascentSameAsDescent" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Same as Descent</span>
                 </label>
               </div>
-              <div 
-                class="flex items-center justify-between p-3 rounded-lg"
-                style="background-color: rgba(14, 36, 70, 0.5)"
-              >
-                <span style="color: #96EEF2">Detect bottom rest vs water movement</span>
-                <label class="toggle-switch">
-                  <input type="checkbox" checked />
-                  <span class="toggle-slider"></span>
-                </label>
+
+              <button @click="ascentAdvancedOpen = !ascentAdvancedOpen" class="flex items-center gap-2 px-4 py-2 mt-2 rounded-lg transition-all hover:opacity-80" style="background-color: rgba(65, 185, 195, 0.2); border: 1px solid rgba(65, 185, 195, 0.4); color: #96EEF2">
+                <ChevronUp v-if="ascentAdvancedOpen" class="w-5 h-5" /><ChevronDown v-else class="w-5 h-5" />
+                <span class="font-medium">Camera Settings</span>
+              </button>
+
+              <div v-if="ascentAdvancedOpen" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+                <template v-if="ascentCameraType !== 'timelapse'">
+                  <div>
+                    <label class="block mb-2 text-sm" style="color: #96EEF2">Resolution</label>
+                    <select v-model="ascentResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                      <option value="4K">4K</option><option value="2.7K">2.7K</option><option value="1080p">1080p</option><option value="720p">720p</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block mb-2 text-sm" style="color: #96EEF2">Frame Rate</label>
+                    <select v-model.number="ascentFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                      <option :value="24">24 fps</option><option :value="30">30 fps</option><option :value="60">60 fps</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
+                    <select v-model="ascentVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                      <option value=".MP4">.MP4</option><option value=".MOV">.MOV</option><option value=".AVI">.AVI</option>
+                    </select>
+                  </div>
+                </template>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Focus</label>
+                  <select v-model="ascentFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="auto">Auto</option><option value="manual">Manual</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">ISO</label>
+                  <select v-model="ascentISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="auto">Auto</option><option value="100">100</option><option value="200">200</option><option value="400">400</option><option value="800">800</option><option value="1600">1600</option><option value="3200">3200</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">White Balance</label>
+                  <select v-model="ascentWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="auto">Auto</option><option value="underwater">Underwater</option><option value="3000k">3000K</option><option value="5500k">5500K</option><option value="6500k">6500K</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Exposure Compensation</label>
+                  <select v-model="ascentExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="-2">-2.0</option><option value="-1">-1.0</option><option value="0">0.0</option><option value="+1">+1.0</option><option value="+2">+2.0</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Sharpness</label>
+                  <select v-model="ascentSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                  </select>
+                </div>
+                <div v-if="ascentCameraType === 'timelapse'">
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
+                  <select v-model="ascentFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <option value="JPEG">JPEG</option><option value="TIFF">TIFF</option>
+                  </select>
+                </div>
+                <button @click="resetAscentCameraDefaults" class="px-4 py-2 text-white rounded-lg transition-all hover:opacity-90" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">Reset to Default Settings</button>
               </div>
-              <div 
-                class="flex items-center justify-between p-3 rounded-lg"
-                style="background-color: rgba(14, 36, 70, 0.5)"
-              >
-                <span style="color: #96EEF2">
-                  Surface arrival notifications 
-                  <span style="color: rgba(150, 238, 242, 0.6); font-size: 0.875rem">(always on)</span>
-                </span>
-                <label class="toggle-switch cursor-not-allowed opacity-75">
-                  <input type="checkbox" checked disabled />
-                  <span class="toggle-slider" style="background-color: #41B9C3"></span>
+            </div>
+          </div>
+
+          <!-- Ascent Light -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+                <Lightbulb class="w-4 h-4" style="color: #41B9C3" />
+                Light
+              </h3>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="ascentLightOn" class="sr-only peer" />
+                <div class="w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" :style="{ backgroundColor: ascentLightOn ? '#41B9C3' : 'rgba(65, 185, 195, 0.3)' }"></div>
+                <span class="ml-3 text-sm" style="color: #96EEF2">{{ ascentLightOn ? 'On' : 'Off' }}</span>
+              </label>
+            </div>
+
+            <div v-if="ascentLightOn" class="pl-6">
+              <div v-if="ascentCameraOn && (ascentCameraType === 'timelapse' || ascentCameraType === 'video-interval')" class="mb-4 p-4 rounded-lg" style="background-color: rgba(65, 185, 195, 0.1); border: 1px solid rgba(65, 185, 195, 0.3)">
+                <p class="text-sm" style="color: #96EEF2">
+                  You have {{ ascentCameraType === 'timelapse' ? 'Timelapse Images' : 'Interval Video' }} selected. Light will automatically {{ ascentCameraType === 'timelapse' ? 'strobe to match camera frequency' : 'turn on to match camera frequency' }}.
+                </p>
+              </div>
+              <div v-else class="mb-4">
+                <label class="block mb-2 text-sm" style="color: #96EEF2">Light Mode</label>
+                <div class="flex gap-4">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" value="continuous" v-model="ascentLightMode" class="w-4 h-4" />
+                    <span style="color: #96EEF2">Continuous Light</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" value="interval" v-model="ascentLightMode" class="w-4 h-4" />
+                    <span style="color: #96EEF2">Interval Light</span>
+                  </label>
+                </div>
+              </div>
+
+              <div v-if="ascentLightMode === 'interval' && !(ascentCameraOn && (ascentCameraType === 'timelapse' || ascentCameraType === 'video-interval'))" class="mb-4 p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+                <h4 class="text-sm" style="color: #96EEF2">Interval Settings</h4>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Light On for</label>
+                  <div class="flex gap-2">
+                    <input type="number" v-model="ascentLightOnNumber" :disabled="ascentMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (ascentMatchCameraInterval ? '0.5' : '1')" min="1" />
+                    <select v-model="ascentLightOnUnit" :disabled="ascentMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (ascentMatchCameraInterval ? '0.5' : '1')">
+                      <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="block mb-2 text-sm" style="color: #96EEF2">Light Off for</label>
+                  <div class="flex gap-2">
+                    <input type="number" v-model="ascentLightOffNumber" :disabled="ascentMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (ascentMatchCameraInterval ? '0.5' : '1')" min="1" />
+                    <select v-model="ascentLightOffUnit" :disabled="ascentMatchCameraInterval" class="w-1/2 px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle + '; opacity: ' + (ascentMatchCameraInterval ? '0.5' : '1')">
+                      <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Light Brightness</label>
+              <input type="range" min="0" max="100" :value="ascentLightBrightness" @input="handleBrightnessChange(Number(($event.target as HTMLInputElement).value), 'ascent')" class="w-full" />
+              <div class="flex justify-between text-sm mt-1" style="color: #96EEF2">
+                <span>0%</span><span>{{ ascentLightBrightness }}%</span><span>100%</span>
+              </div>
+
+              <div class="mt-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" v-model="ascentSameAsDescent" class="w-4 h-4" />
+                  <span style="color: #96EEF2">Same as Descent</span>
                 </label>
               </div>
             </div>
           </div>
+
+          <!-- Ascent Data -->
+          <div class="mb-6">
+            <div class="mb-4">
+              <h3 class="text-white flex items-center gap-2" style="font-weight: 500">
+                <DatabaseIcon class="w-4 h-4" style="color: #41B9C3" />
+                Data
+              </h3>
+            </div>
+            <div class="pl-6">
+              <p class="text-sm" style="color: rgba(150, 238, 242, 0.7)">Data collection is always on at the default sampling rate for each sensor. For sensor calibration, go to the Sensors page.</p>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ==================== RECOVERY SECTION ==================== -->
+      <div class="mb-6 p-6 rounded-lg" :style="phaseStyle">
+        <h2 class="text-white text-xl mb-2 flex items-center gap-2">
+          <Radio class="w-5 h-5" style="color: #96EEF2" />
+          Recovery
+        </h2>
+        <p class="text-sm mb-6" style="color: rgba(150, 238, 242, 0.7)">
+          Recovery settings for location, notifications, and visual signals are required and cannot be modified or deactivated.
+        </p>
+        <div class="space-y-3 text-sm" style="color: #96EEF2">
+          <div class="flex gap-2"><span>•</span><span>Visual Signaling: The mast light LED ring will activate upon surfacing.</span></div>
+          <div class="flex gap-2"><span>•</span><span>Surface Position Updates: Notifications will send every 15 minutes.</span></div>
+          <div class="flex gap-2"><span>•</span><span>LoRa tracking is automatically activated.</span></div>
+          <div class="flex gap-2"><span>•</span><span>Iridium tracking is automatically activated if Iridium is connected and active.</span></div>
         </div>
       </div>
 
       <!-- Battery Planning -->
-      <div class="pt-6" style="border-top: 1px solid rgba(65, 185, 195, 0.2)">
-        <button
-          @click="showBatteryPlanning = !showBatteryPlanning"
-          class="flex items-center gap-2 transition-colors mb-4"
-          style="color: #41B9C3"
-        >
-          <ChevronUp v-if="showBatteryPlanning" class="w-5 h-5" />
-          <ChevronDown v-else class="w-5 h-5" />
-          {{ showBatteryPlanning ? 'Hide' : 'Show' }} Battery Planning
+      <div class="mt-6">
+        <button @click="showBatteryPlanning = !showBatteryPlanning" class="w-full flex items-center justify-between p-4 rounded-lg transition-all" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)">
+          <div class="flex items-center gap-3">
+            <Battery class="w-6 h-6" style="color: #41B9C3" />
+            <span class="text-white text-xl">Battery Planning</span>
+          </div>
+          <ChevronUp v-if="showBatteryPlanning" class="w-6 h-6" style="color: #96EEF2" />
+          <ChevronDown v-else class="w-6 h-6" style="color: #96EEF2" />
         </button>
 
-        <div v-if="showBatteryPlanning" class="space-y-6">
-          <!-- Battery Overview -->
-          <div class="rounded-lg p-6" style="background-color: rgba(14, 36, 70, 0.3)">
-            <div class="flex items-center gap-3 mb-6">
-              <Battery class="w-6 h-6" style="color: #96EEF2" />
-              <h3 class="text-white text-lg">Battery Overview</h3>
-            </div>
-            
-            <!-- Battery Visual Bar -->
-            <div class="mb-6">
-              <div class="flex items-center justify-between mb-2">
-                <span style="color: #96EEF2">Estimated Usage for Mission</span>
-                <span 
-                  class="text-xl font-semibold"
-                  :style="{ color: calculateBatteryUsage.batteryUsagePercent > 80 ? '#DD2C1D' : '#41B9C3' }"
-                >
-                  {{ calculateBatteryUsage.batteryUsagePercent.toFixed(1) }}%
-                </span>
-              </div>
-              <div 
-                class="w-full h-8 rounded-lg overflow-hidden"
-                style="background-color: rgba(14, 36, 70, 0.5)"
-              >
-                <div 
-                  class="h-full transition-all duration-300"
-                  :style="{ 
-                    width: `${calculateBatteryUsage.batteryUsagePercent}%`,
-                    background: calculateBatteryUsage.batteryUsagePercent > 80 
-                      ? 'linear-gradient(90deg, #DD2C1D 0%, #FF6B6B 100%)'
-                      : 'linear-gradient(90deg, #41B9C3 0%, #96EEF2 100%)'
-                  }"
-                ></div>
-              </div>
-              <div class="flex items-center justify-between mt-2 text-sm" style="color: #96EEF2">
-                <span>Mission Duration: {{ calculateBatteryUsage.durationInHours.toFixed(2) }}h</span>
-                <span>Total Battery Life: {{ calculateBatteryUsage.batteryLife.toFixed(2) }}h</span>
-              </div>
-            </div>
+        <div v-if="showBatteryPlanning" class="mt-4 p-6 rounded-lg" :style="phaseStyle">
+          <div class="mb-6">
+            <label class="block mb-2 text-sm" style="color: #96EEF2">Estimated Dive Depth (m)</label>
+            <input type="number" v-model="estimatedDepth" placeholder="Enter estimated depth" class="w-full px-4 py-3 text-white rounded-lg focus:outline-none" :style="inputStyle" />
+            <p class="mt-2 text-xs" style="color: rgba(150, 238, 242, 0.6)">Enter the estimated maximum depth for this dive to help calculate battery requirements.</p>
+          </div>
 
-            <!-- Key Stats -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div 
-                class="rounded-lg p-4"
-                style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-              >
-                <div class="flex items-center gap-2 mb-2">
-                  <Zap class="w-4 h-4" style="color: #96EEF2" />
-                  <span class="text-sm" style="color: #96EEF2">Total Power Draw</span>
-                </div>
-                <p class="text-2xl font-semibold text-white">{{ calculateBatteryUsage.totalPower.toFixed(1) }}W</p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="p-4 rounded-lg" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <div class="flex items-center justify-between mb-2">
+                <span style="color: #96EEF2">Estimated Dive Depth</span>
+                <span class="text-white text-xl">{{ estimatedDepth || '--' }}m</span>
               </div>
-              <div 
-                class="rounded-lg p-4"
-                style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-              >
-                <div class="flex items-center gap-2 mb-2">
-                  <Battery class="w-4 h-4" style="color: #96EEF2" />
-                  <span class="text-sm" style="color: #96EEF2">Battery Capacity</span>
-                </div>
-                <p class="text-2xl font-semibold text-white">100Wh</p>
+            </div>
+            <div class="p-4 rounded-lg" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <div class="flex items-center justify-between mb-2">
+                <span style="color: #96EEF2">Total Power Draw</span>
+                <span class="text-white text-xl">{{ batteryData.totalPower.toFixed(1) }}W</span>
               </div>
-              <div 
-                class="rounded-lg p-4"
-                style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.3)"
-              >
-                <div class="flex items-center gap-2 mb-2">
-                  <Clock class="w-4 h-4" style="color: #96EEF2" />
-                  <span class="text-sm" style="color: #96EEF2">Max Runtime</span>
-                </div>
-                <p class="text-2xl font-semibold text-white">{{ calculateBatteryUsage.batteryLife.toFixed(1) }}h</p>
+            </div>
+            <div class="p-4 rounded-lg" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <div class="flex items-center justify-between mb-2">
+                <span style="color: #96EEF2">Estimated Battery Life</span>
+                <span class="text-white text-xl">{{ batteryData.batteryLife.toFixed(1) }}h</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-lg" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+            <div class="flex items-center justify-between mb-3">
+              <span style="color: #96EEF2">Battery Usage for Dive</span>
+              <span class="text-white text-xl">{{ batteryData.batteryUsagePercent.toFixed(0) }}%</span>
+            </div>
+            <div class="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
+              <div class="h-full rounded-full transition-all" :style="{ width: `${batteryData.batteryUsagePercent}%`, background: batteryData.batteryUsagePercent > 80 ? 'linear-gradient(90deg, #DD2C1D 0%, #FF9937 100%)' : batteryData.batteryUsagePercent > 50 ? 'linear-gradient(90deg, #FF9937 0%, #FCD869 100%)' : 'linear-gradient(90deg, #41B9C3 0%, #96EEF2 100%)' }"></div>
+            </div>
+          </div>
+
+          <div v-if="batteryData.batteryUsagePercent > 80" class="mt-4 p-4 rounded-lg" style="background-color: rgba(221, 44, 29, 0.1); border: 1px solid rgba(221, 44, 29, 0.3)">
+            <div class="flex items-start gap-3">
+              <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+              <div>
+                <p class="mb-2" style="color: #DD2C1D">Battery Warning:</p>
+                <p class="text-sm" style="color: #FF9937">Dive configuration may exceed battery capacity. Consider changing settings to reduce power consumption or dive duration.</p>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Save Configuration Button -->
+      <div class="mt-6 mb-6">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button @click="handleOpenSaveModal" class="flex-1 px-6 py-4 text-white rounded-lg transition-all hover:opacity-90 flex items-center justify-center gap-2" style="background: linear-gradient(135deg, #41B9C3 0%, #187D8B 100%)">
+            <Save class="w-5 h-5" />
+            {{ selectedConfiguration && selectedConfiguration !== 'New Configuration' ? 'Save Configuration' : 'Save New Configuration' }}
+          </button>
+          <button v-if="selectedConfiguration && selectedConfiguration !== 'New Configuration'" @click="configurationName = ''; showSaveModal = true" class="px-6 py-4 text-white rounded-lg transition-all hover:opacity-90 flex items-center justify-center gap-2" style="background-color: rgba(65, 185, 195, 0.3); border: 1px solid #41B9C3">
+            <Copy class="w-5 h-5" />
+            Save As...
+          </button>
+        </div>
+      </div>
     </div>
 
-    <!-- Previous Missions -->
-    <div 
-      class="backdrop-blur-sm rounded-xl p-6 border mt-6"
-      style="background-color: rgba(0, 77, 100, 0.4); border-color: rgba(65, 185, 195, 0.3)"
-    >
-      <h2 class="text-white text-xl mb-6 flex items-center gap-2">
-        <Database class="w-5 h-5" style="color: #96EEF2" />
-        Previous Missions
-      </h2>
-      <div class="space-y-3">
-        <div
-          v-for="mission in previousMissions"
-          :key="mission.id"
-          class="rounded-lg p-5 transition-all hover:bg-slate-700/50"
-          style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)"
-        >
-          <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-            <div class="flex-1">
-              <div class="flex items-center gap-3 mb-3">
-                <h3 class="text-white text-lg">{{ mission.name }}</h3>
-                <span 
-                  class="px-2 py-1 rounded text-xs"
-                  style="background-color: rgba(252, 216, 105, 0.2); color: #FCD869"
-                >
-                  {{ mission.status }}
-                </span>
-              </div>
-              
-              <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
-                <div class="flex items-center gap-2">
-                  <Calendar class="w-4 h-4" style="color: #96EEF2" />
-                  <span class="text-sm" style="color: #96EEF2">{{ mission.date }}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <Clock class="w-4 h-4" style="color: #96EEF2" />
-                  <span class="text-sm" style="color: #96EEF2">{{ mission.duration }}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <MapPin class="w-4 h-4" style="color: #96EEF2" />
-                  <span class="text-sm" style="color: #96EEF2">{{ mission.location }}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-sm" style="color: #96EEF2">Max Depth: {{ mission.maxDepth }}m</span>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-4">
-                <div class="flex items-center gap-2">
-                  <Camera class="w-4 h-4" style="color: #41B9C3" />
-                  <span class="text-sm" style="color: #96EEF2">{{ mission.images }} images</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <Image class="w-4 h-4" style="color: #41B9C3" />
-                  <span class="text-sm" style="color: #96EEF2">{{ mission.videos }} videos</span>
-                </div>
-              </div>
-            </div>
-
-            <button
-              class="flex-shrink-0 p-3 rounded-lg transition-all hover:opacity-80 self-start md:self-auto"
-              style="background: linear-gradient(135deg, #41B9C3 0%, #187D8B 100%); color: white"
-              title="View Mission Media"
-            >
-              <Database class="w-5 h-5" />
+    <!-- Save Configuration Modal -->
+    <Teleport to="body">
+      <div v-if="showSaveModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="w-full max-w-md rounded-xl p-6" style="background-color: #0E2446; border: 2px solid #41B9C3">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-white text-xl">Save Configuration</h2>
+            <button @click="showSaveModal = false" class="text-white hover:opacity-80 transition-opacity">
+              <X class="w-5 h-5" />
             </button>
           </div>
+
+          <template v-if="selectedConfiguration && selectedConfiguration !== 'New Configuration' && !configurationName">
+            <div class="mb-6">
+              <p class="text-white mb-4">Save changes to <span class="font-semibold" style="color: #96EEF2">{{ selectedConfiguration }}</span>?</p>
+              <div class="rounded-lg p-3 mb-4" style="background-color: rgba(65, 185, 195, 0.1); border: 1px solid rgba(65, 185, 195, 0.3)">
+                <p class="text-sm" style="color: #96EEF2"><strong>Overwrite:</strong> Replace the existing configuration with your updated settings.</p>
+              </div>
+              <div class="rounded-lg p-3" style="background-color: rgba(255, 153, 55, 0.1); border: 1px solid rgba(255, 153, 55, 0.3)">
+                <p class="text-sm" style="color: #FF9937"><strong>Save As New:</strong> Create a new configuration. The original will remain unchanged.</p>
+              </div>
+            </div>
+            <div class="flex flex-col gap-3">
+              <div class="flex gap-3">
+                <button @click="showSaveModal = false" class="flex-1 px-4 py-3 rounded-lg transition-all" style="background-color: rgba(65, 185, 195, 0.2); border: 1px solid rgba(65, 185, 195, 0.3); color: #96EEF2">Cancel</button>
+                <button @click="handleOverwriteSave" class="flex-1 px-4 py-3 text-white rounded-lg transition-all hover:opacity-90" style="background: linear-gradient(135deg, #41B9C3 0%, #187D8B 100%)">
+                  <Save class="w-4 h-4 inline mr-2" />Overwrite
+                </button>
+              </div>
+              <button @click="handleSaveAsNew" class="w-full px-4 py-3 text-white rounded-lg transition-all hover:opacity-90" style="background-color: #FF9937">
+                <Copy class="w-4 h-4 inline mr-2" />Save As New
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="mb-6">
+              <label class="block mb-2 text-sm" style="color: #96EEF2">Configuration Name</label>
+              <input type="text" v-model="configurationName" @keypress.enter="handleSaveConfiguration" placeholder="Enter configuration name" class="w-full px-4 py-3 text-white rounded-lg focus:outline-none" :style="inputStyle" autofocus />
+              <p v-if="selectedConfiguration && selectedConfiguration !== 'New Configuration'" class="text-sm mt-2" style="color: #96EEF2; opacity: 0.8">
+                Saving as a new configuration. Original will remain unchanged.
+              </p>
+            </div>
+            <div class="flex gap-3">
+              <button @click="showSaveModal = false" class="flex-1 px-4 py-3 rounded-lg transition-all" style="background-color: rgba(65, 185, 195, 0.2); border: 1px solid rgba(65, 185, 195, 0.3); color: #96EEF2">Cancel</button>
+              <button @click="handleSaveConfiguration" :disabled="!configurationName.trim()" class="flex-1 px-4 py-3 text-white rounded-lg transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed" style="background: linear-gradient(135deg, #41B9C3 0%, #187D8B 100%)">
+                <Save class="w-4 h-4 inline mr-2" />Save
+              </button>
+            </div>
+          </template>
         </div>
       </div>
-    </div>
+    </Teleport>
+
+    <!-- Navigation Warning Modal -->
+    <Teleport to="body">
+      <div v-if="showNavigationWarning" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="w-full max-w-lg rounded-xl p-6" style="background-color: #0E2446; border: 2px solid #FF9937">
+          <div class="flex items-start gap-4 mb-6">
+            <AlertTriangle class="w-6 h-6 flex-shrink-0 mt-1" style="color: #FF9937" />
+            <div>
+              <h2 class="text-white text-xl mb-2" style="font-family: Montserrat, sans-serif">Unsaved Changes</h2>
+              <p class="text-white text-sm opacity-90">You have unsaved changes to your configuration. Would you like to save before switching?</p>
+            </div>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <button @click="handleCancelNavigation" class="flex-1 px-4 py-3 rounded-lg transition-all" style="background-color: rgba(65, 185, 195, 0.2); border: 1px solid rgba(65, 185, 195, 0.3); color: #96EEF2">Cancel</button>
+            <button @click="handleDiscardChanges" class="flex-1 px-4 py-3 rounded-lg transition-all hover:opacity-90" style="background-color: rgba(221, 44, 29, 0.2); border: 1px solid rgba(221, 44, 29, 0.4); color: #DD2C1D">Discard Changes</button>
+            <button @click="showNavigationWarning = false; handleOpenSaveModal()" class="flex-1 px-4 py-3 text-white rounded-lg transition-all hover:opacity-90" style="background: linear-gradient(135deg, #41B9C3 0%, #187D8B 100%)">Save Configuration</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Brightness Warning Banner -->
+    <Teleport to="body">
+      <div v-if="showBrightnessWarning" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4">
+        <div class="rounded-lg p-4 shadow-xl" style="background-color: #0E2446; border: 2px solid #DD2C1D">
+          <div class="flex items-start gap-3">
+            <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+            <div class="flex-1">
+              <h3 class="text-white font-semibold mb-1">Low Brightness Warning</h3>
+              <p class="text-white text-sm opacity-90">Setting the light brightness below 75% may result in poor image quality and reduced visibility.</p>
+            </div>
+            <div class="flex gap-2 ml-2">
+              <button @click="cancelBrightnessChange" class="px-3 py-1.5 text-sm text-white rounded transition-all hover:opacity-80" style="background-color: rgba(65, 185, 195, 0.2); border: 1px solid rgba(65, 185, 195, 0.4)">Cancel</button>
+              <button @click="confirmBrightnessChange" class="px-3 py-1.5 text-sm text-white rounded transition-all hover:opacity-90" style="background-color: #DD2C1D">Continue</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Unsaved Changes Warning Banner -->
+    <Teleport to="body">
+      <div v-if="hasUnsavedChanges" class="fixed bottom-0 left-0 right-0 p-3 md:p-4 border-t" style="background-color: rgba(255, 153, 55, 0.95); backdrop-filter: blur(8px); border-color: #FF9937; z-index: 60">
+        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+            <AlertTriangle class="w-4 h-4 sm:w-5 sm:h-5 text-white flex-shrink-0" />
+            <p class="text-white font-medium text-sm sm:text-base">
+              <span class="hidden sm:inline">You have unsaved changes. Please save your configuration before navigating away.</span>
+              <span class="sm:hidden">Unsaved changes. Please save before leaving.</span>
+            </p>
+          </div>
+          <button @click="handleOpenSaveModal" class="w-full sm:w-auto px-4 sm:px-6 py-2 text-white text-sm sm:text-base rounded-lg transition-all hover:opacity-90 whitespace-nowrap" style="background-color: #0E2446; border: 1px solid #41B9C3">
+            Save Configuration
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
-

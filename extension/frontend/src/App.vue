@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { Screen } from './types'
+import type { Screen, DiveData } from './types'
 import Navigation from './components/Navigation.vue'
 import Footer from './components/Footer.vue'
 import HomeScreen from './components/HomeScreen.vue'
@@ -11,12 +11,39 @@ import MediaManager from './components/MediaManager.vue'
 import HelpTutorials from './components/HelpTutorials.vue'
 import Notifications from './components/Notifications.vue'
 import Location from './components/Location.vue'
+import AllMissions from './components/AllMissions.vue'
+import ViewMediaScreen from './components/ViewMediaScreen.vue'
 
 const currentScreen = ref<Screen>('home')
+const previousScreen = ref<Screen>('media')
 const isConnected = ref(false)
+const isDiveActive = ref(false)
+const targetSensor = ref<string | null>(null)
+const selectedDiveData = ref<DiveData | null>(null)
+const releaseWeightBy = ref<'datetime' | 'elapsed'>('elapsed')
+const selectedConfigFromDashboard = ref('')
 
-const navigateTo = (screen: Screen) => {
+const handleNavigate = (screen: Screen, sensorName?: string) => {
+  previousScreen.value = currentScreen.value
   currentScreen.value = screen
+  if (screen === 'sensors' && sensorName) {
+    targetSensor.value = sensorName
+  } else {
+    targetSensor.value = null
+  }
+  if (screen !== 'viewmedia') {
+    selectedDiveData.value = null
+  }
+}
+
+const handleSetCurrentScreen = (screen: Screen, diveData?: DiveData) => {
+  previousScreen.value = currentScreen.value
+  currentScreen.value = screen
+  if (screen === 'viewmedia' && diveData) {
+    selectedDiveData.value = diveData
+  } else if (screen !== 'viewmedia') {
+    selectedDiveData.value = null
+  }
 }
 
 const setConnected = (connected: boolean) => {
@@ -25,38 +52,71 @@ const setConnected = (connected: boolean) => {
 </script>
 
 <template>
-  <div 
+  <div
     class="min-h-screen flex flex-col"
     style="background: linear-gradient(135deg, #0E2446 0%, #0E2446 60%, #004D64 100%)"
   >
-    <Navigation 
+    <div
+      v-if="isDiveActive"
+      class="w-full py-3 px-4 text-white text-center font-semibold"
+      style="background-color: #DD2C1D; font-family: Montserrat, sans-serif"
+    >
+      Active Dive
+    </div>
+
+    <Navigation
       :current-screen="currentScreen"
-      :is-connected="isConnected"
-      @navigate="navigateTo"
+      @navigate="handleNavigate"
     />
-    
-    <main class="pb-20 md:pb-0 flex-grow">
-      <HomeScreen 
+
+    <main class="pb-0 flex-grow">
+      <HomeScreen
         v-if="currentScreen === 'home'"
         :is-connected="isConnected"
-        @navigate="navigateTo"
+        @navigate="handleNavigate"
+        @start-dive="isDiveActive = true"
+        :release-weight-by="releaseWeightBy"
+        @release-weight-by-change="releaseWeightBy = $event"
+        @configuration-select="selectedConfigFromDashboard = $event"
       />
-      <MissionProgramming v-else-if="currentScreen === 'missions'" />
-      <SensorConfiguration v-else-if="currentScreen === 'sensors'" />
-      <MediaManager v-else-if="currentScreen === 'media'" />
-      <NetworkSetup 
+      <MissionProgramming
+        v-else-if="currentScreen === 'dives'"
+        @navigate="handleSetCurrentScreen"
+        :release-weight-by="releaseWeightBy"
+        @release-weight-by-change="releaseWeightBy = $event"
+        :initial-configuration="selectedConfigFromDashboard"
+      />
+      <AllMissions
+        v-else-if="currentScreen === 'alldives'"
+        @navigate="handleSetCurrentScreen"
+      />
+      <SensorConfiguration
+        v-else-if="currentScreen === 'sensors'"
+        @navigate="handleSetCurrentScreen"
+        :target-sensor="targetSensor"
+      />
+      <MediaManager
+        v-else-if="currentScreen === 'media'"
+        @navigate="handleSetCurrentScreen"
+      />
+      <NetworkSetup
         v-else-if="currentScreen === 'network'"
         @connect="setConnected"
       />
-      <Notifications 
+      <Notifications
         v-else-if="currentScreen === 'notifications'"
-        @navigate="navigateTo"
+        @navigate="handleSetCurrentScreen"
       />
       <HelpTutorials v-else-if="currentScreen === 'help'" />
       <Location v-else-if="currentScreen === 'location'" />
+      <ViewMediaScreen
+        v-else-if="currentScreen === 'viewmedia'"
+        @navigate="handleSetCurrentScreen"
+        :previous-screen="previousScreen"
+        :dive-data="selectedDiveData"
+      />
     </main>
-    
+
     <Footer />
   </div>
 </template>
-

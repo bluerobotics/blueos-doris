@@ -1,42 +1,23 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { MapPin, Satellite, Radio, Navigation, Clock, Signal } from 'lucide-vue-next'
-import { useLocation } from '../composables/useApi'
-
-// Fetch real location data from API
-const { location, fetchLocation } = useLocation()
 
 const iridiumStatus = ref<'active' | 'standby' | 'offline'>('active')
 const loraStatus = ref<'active' | 'standby' | 'offline'>('active')
 
-// Computed location values from API
-const currentLocation = computed(() => ({
-  lat: location.value?.latitude ?? 0,
-  lon: location.value?.longitude ?? 0,
-  altitude: location.value?.altitude ?? 0,
-  depth: location.value?.depth ?? 0,
-  lastUpdate: location.value?.last_update ?? 'Unknown'
-}))
+const currentLocation = {
+  lat: 41.7128,
+  lon: -74.0060,
+  altitude: -45.5,
+  lastUpdate: '2 minutes ago'
+}
 
-// GPS/Satellite data from API
-const iridiumData = computed(() => ({
-  signalStrength: 85, // Mock - no Iridium data in BlueOS
-  satellites: location.value?.satellites ?? 0,
-  lastTransmission: '5 minutes ago', // Mock
-  nextScheduled: '10 minutes' // Mock
-}))
-
-// Fetch data on mount and refresh periodically
-let refreshInterval: ReturnType<typeof setInterval> | null = null
-
-onMounted(() => {
-  fetchLocation()
-  refreshInterval = setInterval(fetchLocation, 5000)
-})
-
-onUnmounted(() => {
-  if (refreshInterval) clearInterval(refreshInterval)
-})
+const iridiumData = {
+  signalStrength: 85,
+  satellites: 4,
+  lastTransmission: '5 minutes ago',
+  nextScheduled: '10 minutes'
+}
 
 const loraData = {
   signalStrength: 72,
@@ -77,15 +58,15 @@ const getStatusLabel = (status: string) => {
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
           <p class="text-sm mb-1" style="color: #96EEF2">Latitude</p>
-          <p class="text-white text-lg">{{ Math.abs(currentLocation.lat).toFixed(4) }}° {{ currentLocation.lat >= 0 ? 'N' : 'S' }}</p>
+          <p class="text-white text-lg">{{ currentLocation.lat }}° N</p>
         </div>
         <div>
           <p class="text-sm mb-1" style="color: #96EEF2">Longitude</p>
-          <p class="text-white text-lg">{{ Math.abs(currentLocation.lon).toFixed(4) }}° {{ currentLocation.lon >= 0 ? 'E' : 'W' }}</p>
+          <p class="text-white text-lg">{{ Math.abs(currentLocation.lon) }}° W</p>
         </div>
         <div>
           <p class="text-sm mb-1" style="color: #96EEF2">Depth</p>
-          <p class="text-white text-lg">{{ currentLocation.depth.toFixed(1) }} m</p>
+          <p class="text-white text-lg">{{ Math.abs(currentLocation.altitude) }} m</p>
         </div>
         <div>
           <p class="text-sm mb-1" style="color: #96EEF2">Last Update</p>
@@ -142,9 +123,7 @@ const getStatusLabel = (status: string) => {
           class="w-full h-full relative"
           style="background: linear-gradient(135deg, rgba(14, 36, 70, 0.8) 0%, rgba(0, 77, 100, 0.6) 100%)"
         >
-          <!-- Simple map visualization with grid -->
           <svg width="100%" height="100%" class="absolute inset-0">
-            <!-- Grid lines -->
             <defs>
               <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
                 <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(65, 185, 195, 0.2)" stroke-width="0.5"/>
@@ -233,15 +212,13 @@ const getStatusLabel = (status: string) => {
         </div>
       </div>
 
-      <!-- LoRa Map - Black and White Locator -->
+      <!-- LoRa Map -->
       <div
         class="rounded-lg overflow-hidden border"
         style="border-color: rgba(65, 185, 195, 0.3); height: 400px"
       >
         <div class="w-full h-full relative" style="background-color: #1a1a1a">
-          <!-- Black and white topographic-style map -->
           <svg width="100%" height="100%" class="absolute inset-0">
-            <!-- Background gradient -->
             <defs>
               <radialGradient id="loraGradient" cx="50%" cy="50%" r="50%">
                 <stop offset="0%" stop-color="#2a2a2a" />
@@ -266,6 +243,12 @@ const getStatusLabel = (status: string) => {
             <text x="10%" y="52%" fill="#808080" font-size="12" text-anchor="middle">W</text>
             <text x="90%" y="52%" fill="#808080" font-size="12" text-anchor="middle">E</text>
 
+            <!-- Range indicators -->
+            <text x="52%" y="60%" fill="#707070" font-size="10">0.5 km</text>
+            <text x="52%" y="70%" fill="#707070" font-size="10">1.0 km</text>
+            <text x="52%" y="80%" fill="#707070" font-size="10">1.5 km</text>
+            <text x="52%" y="90%" fill="#707070" font-size="10">2.0 km</text>
+
             <!-- Base station -->
             <circle cx="30%" cy="30%" r="10" fill="none" stroke="white" stroke-width="2" />
             <circle cx="30%" cy="30%" r="5" fill="white" />
@@ -277,6 +260,9 @@ const getStatusLabel = (status: string) => {
 
             <!-- Connection line -->
             <line x1="30%" y1="30%" x2="50%" y2="50%" stroke="white" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.6" />
+
+            <!-- Signal strength arc -->
+            <path d="M 48% 45% Q 38% 35%, 32% 28%" fill="none" stroke="#a0a0a0" stroke-width="1" opacity="0.5" />
           </svg>
 
           <div class="absolute bottom-4 left-4 right-4">
@@ -304,4 +290,3 @@ const getStatusLabel = (status: string) => {
     </div>
   </div>
 </template>
-
