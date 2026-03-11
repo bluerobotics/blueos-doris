@@ -84,14 +84,16 @@ def run() -> None:
     """Run the DORIS backend server."""
     app = create_app()
 
+    print_server_address = f"http://{settings.host}:{settings.port}".ljust(35)
+    print_api_docs_address = f"http://{settings.host}:{settings.port}/docs".ljust(35)
     print(f"""
 ╔═══════════════════════════════════════════════════════════════╗
 ║                                                               ║
 ║   🐬 DORIS Backend Server                                     ║
 ║   Deep Ocean Research and Imaging System                      ║
 ║                                                               ║
-║   Server:  http://{settings.host}:{settings.port}                          ║
-║   API Docs: http://{settings.host}:{settings.port}/docs                     ║
+║   Server: {print_server_address}                 ║
+║   API Docs: {print_api_docs_address}               ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
     """)

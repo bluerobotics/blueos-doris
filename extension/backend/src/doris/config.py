@@ -1,5 +1,7 @@
 """Configuration settings for DORIS backend."""
 
+import os
+
 from pydantic_settings import BaseSettings
 
 
@@ -14,7 +16,7 @@ class Settings(BaseSettings):
     # BlueOS settings - defaults to host.docker.internal for Docker
     # When running as BlueOS extension, use host.docker.internal to access BlueOS services
     # Set DORIS_BLUEOS_ADDRESS to override (e.g., http://192.168.2.2 for direct access)
-    blueos_address: str = "http://host.docker.internal"
+    blueos_address: str = os.environ.get("DORIS_BLUEOS_ADDRESS", "http://host.docker.internal")
 
     # BlueOS service ports
     cable_guy_port: int = 9090

@@ -2,14 +2,17 @@
 
 from ..config import blueos_services
 from ..models.network import ConnectionStatus, NetworkCredentials, NetworkInfo, WifiNetwork
-from .base import BlueOSClient
+from .blueos.network import NetworkClient
 
 
 class NetworkService:
-    """Service for managing network connections via BlueOS WiFi Manager."""
+    """Service for managing network connections via BlueOS WiFi Manager.
+
+    Uses the unified NetworkClient which auto-detects v1/v2 API availability.
+    """
 
     def __init__(self):
-        self.wifi_manager = BlueOSClient(blueos_services.wifi_manager)
+        self._client = NetworkClient(blueos_services.wifi_manager)
 
     async def get_network_info(self) -> NetworkInfo:
         """Get current network information."""
@@ -25,9 +28,8 @@ class NetworkService:
     async def get_connection_status(self) -> ConnectionStatus:
         """Get current connection status."""
         try:
-            status = await self.wifi_manager.get("/v2.0/status")
+            status = await self._client.get_status()
 
-            # BlueOS returns state: "connected" | "disconnected"
             is_connected = status.get("state") == "connected"
 
             return ConnectionStatus(
@@ -38,7 +40,6 @@ class NetworkService:
                 signal_strength=status.get("signallevel"),
             )
         except Exception:
-            # Return disconnected status
             return ConnectionStatus(
                 is_connected=False,
                 ssid=None,
@@ -47,22 +48,19 @@ class NetworkService:
     async def scan_networks(self) -> list[WifiNetwork]:
         """Scan for available WiFi networks."""
         try:
-            networks_data = await self.wifi_manager.get("/v2.0/scan")
+            networks_data = await self._client.scan()
             saved_networks = await self._get_saved_networks()
             connection_status = await self.get_connection_status()
 
             networks = []
-            seen_ssids = set()  # Deduplicate networks with same SSID
+            seen_ssids: set[str] = set()
 
             for net in networks_data:
                 ssid = net.get("ssid", "")
-                if not ssid:  # Skip hidden networks
-                    continue
-                if ssid in seen_ssids:  # Skip duplicates (same SSID, different BSSID)
+                if not ssid or ssid in seen_ssids:
                     continue
                 seen_ssids.add(ssid)
 
-                # Parse security from flags like "[WEP-WPA2-PSK-CCMP]"
                 flags = net.get("flags", "")
                 security = self._parse_security(flags)
 
@@ -73,18 +71,20 @@ class NetworkService:
                         security=security,
                         frequency=self._get_frequency_band(net.get("frequency", 2400)),
                         is_saved=ssid in saved_networks,
-                        is_connected=(connection_status.is_connected and connection_status.ssid == ssid),
+                        is_connected=(
+                            connection_status.is_connected
+                            and connection_status.ssid == ssid
+                        ),
                     )
                 )
 
-            # Sort by signal strength
             networks.sort(key=lambda n: n.signal_strength, reverse=True)
             return networks
 
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Failed to scan networks: {e}")
-            # Return empty list on error
             return []
 
     def _parse_security(self, flags: str) -> str:
@@ -105,14 +105,7 @@ class NetworkService:
     async def connect(self, credentials: NetworkCredentials) -> ConnectionStatus:
         """Connect to a WiFi network."""
         try:
-            await self.wifi_manager.post(
-                "/v2.0/connect",
-                json={
-                    "ssid": credentials.ssid,
-                    "password": credentials.password,
-                },
-            )
-            # Wait a moment and return status
+            await self._client.connect(credentials.ssid, credentials.password)
             return await self.get_connection_status()
         except Exception:
             return ConnectionStatus(
@@ -123,7 +116,7 @@ class NetworkService:
     async def disconnect(self) -> ConnectionStatus:
         """Disconnect from current network."""
         try:
-            await self.wifi_manager.post("/v2.0/disconnect")
+            await self._client.disconnect()
             return await self.get_connection_status()
         except Exception:
             return ConnectionStatus(is_connected=False)
@@ -131,7 +124,7 @@ class NetworkService:
     async def forget_network(self, ssid: str) -> bool:
         """Forget a saved network."""
         try:
-            await self.wifi_manager.delete(f"/v2.0/saved/{ssid}")
+            await self._client.forget_network(ssid)
             return True
         except Exception:
             return False
@@ -139,7 +132,7 @@ class NetworkService:
     async def _get_saved_networks(self) -> set[str]:
         """Get list of saved network SSIDs."""
         try:
-            saved = await self.wifi_manager.get("/v2.0/saved")
+            saved = await self._client.get_saved()
             return {net.get("ssid", "") for net in saved}
         except Exception:
             return set()
@@ -152,5 +145,4 @@ class NetworkService:
 
     async def close(self) -> None:
         """Close HTTP client."""
-        await self.wifi_manager.close()
-
+        await self._client.close()
