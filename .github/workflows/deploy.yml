@@ -17,13 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Docker Hub
-        uses: BlueOS-community/Deploy-BlueOS-Extension@v1
+        uses: patrickelectric/Deploy-BlueOS-Extension@improve-docker-path
         with:
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-password: ${{ secrets.DOCKER_PASSWORD }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           image-name: ${{ env.IMAGE_NAME }}
-          dockerfile-location: ./extension
+          context: ./extension
 
   deploy-ghcr:
     runs-on: ubuntu-latest
