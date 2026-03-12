@@ -27,7 +27,6 @@ interface DisplayModule {
   name: string
   type: string
   connected: boolean
-  power: number
   sampleRate?: number
   calibrationFile?: string
   moduleStatus: string
@@ -56,7 +55,6 @@ watch(apiModules, (newModules) => {
       name: m.name,
       type: m.type,
       connected: m.status === 'connected',
-      power: m.power_usage,
       sampleRate: m.sample_rate ?? undefined,
       calibrationFile: m.firmware_version ?? undefined,
       moduleStatus: m.module_status,
@@ -113,7 +111,7 @@ const detectSensors = async () => {
 
 const toggleConnection = (id: string) => {
   modules.value = modules.value.map(m =>
-    m.id === id ? { ...m, connected: !m.connected, power: !m.connected ? 85 : 0 } : m
+    m.id === id ? { ...m, connected: !m.connected } : m
   )
 }
 
@@ -202,10 +200,6 @@ const getStatusColor = (moduleStatus: string) => {
               <div class="h-3 w-24 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
               <div class="h-3 w-20 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
             </div>
-            <div class="flex justify-between">
-              <div class="h-3 w-32 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
-              <div class="h-3 w-10 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
-            </div>
           </div>
         </div>
       </div>
@@ -271,10 +265,6 @@ const getStatusColor = (moduleStatus: string) => {
                 <span :style="{ color: mod.connected ? '#FCD869' : '#DD2C1D' }">
                   {{ mod.connected ? 'Connected' : 'Disconnected' }}
                 </span>
-              </div>
-              <div class="flex items-center justify-between text-sm">
-                <span style="color: #96EEF2">Power/Battery Usage</span>
-                <span class="text-white">{{ mod.power }}%</span>
               </div>
             </div>
           </div>
