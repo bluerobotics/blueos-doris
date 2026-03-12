@@ -11,6 +11,7 @@ from ..models.sensors import (
     SensorReading,
     VideoStream,
 )
+from .barometer import BarometerService
 from .base import BlueOSClient
 from .lights import LightService
 
@@ -24,6 +25,7 @@ class SensorService:
         self.ping_service = BlueOSClient(blueos_services.ping_service)
         self.camera_manager = BlueOSClient(blueos_services.camera_manager)
         self.light_service = LightService()
+        self.barometer_service = BarometerService()
 
     async def get_connected_modules(self) -> list[ModuleInfo]:
         """Get all connected modules."""
@@ -40,6 +42,10 @@ class SensorService:
         # Get configured light modules
         light_modules = await self.light_service.get_light_modules()
         modules.extend(light_modules)
+
+        # Get barometer/thermometer from SCALED_PRESSURE2
+        baro_modules = await self.barometer_service.get_modules()
+        modules.extend(baro_modules)
 
         return modules
 
@@ -177,4 +183,5 @@ class SensorService:
         await self.ping_service.close()
         await self.camera_manager.close()
         await self.light_service.close()
+        await self.barometer_service.close()
 
