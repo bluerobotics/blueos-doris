@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { Wifi, WifiOff, Upload, RefreshCw } from 'lucide-vue-next'
+import { Wifi, WifiOff, Upload, RefreshCw, Loader2 } from 'lucide-vue-next'
 import {
   mdiCameraOutline,
   mdiVideoOutline,
@@ -45,7 +45,7 @@ const emit = defineEmits<{
   navigate: [screen: Screen]
 }>()
 
-const { modules: apiModules, fetchModules } = useSensors()
+const { modules: apiModules, loading: sensorsLoading, fetchModules } = useSensors()
 
 const modules = ref<DisplayModule[]>([])
 
@@ -158,7 +158,8 @@ const getStatusColor = (moduleStatus: string) => {
     >
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <h1 class="text-white text-2xl flex items-center gap-2">
-          <svg class="w-6 h-6" viewBox="0 0 24 24" style="color: #96EEF2">
+          <Loader2 v-if="sensorsLoading" class="w-6 h-6 animate-spin" style="color: #96EEF2" />
+          <svg v-else class="w-6 h-6" viewBox="0 0 24 24" style="color: #96EEF2">
             <path :d="mdiGauge" fill="currentColor" />
           </svg>
           Sensor Status
@@ -177,8 +178,51 @@ const getStatusColor = (moduleStatus: string) => {
         </button>
       </div>
 
+      <!-- Loading skeleton -->
+      <div v-if="sensorsLoading && modules.length === 0" class="space-y-4">
+        <div
+          v-for="i in 4"
+          :key="i"
+          class="rounded-lg p-4 animate-pulse"
+          style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)"
+        >
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-6 h-6 rounded" style="background-color: rgba(150, 238, 242, 0.15)" />
+              <div class="h-4 rounded" :style="{ width: `${90 + i * 25}px`, backgroundColor: 'rgba(150, 238, 242, 0.15)' }" />
+            </div>
+            <div class="w-9 h-9 rounded-lg" style="background-color: rgba(150, 238, 242, 0.1)" />
+          </div>
+          <div class="space-y-2">
+            <div class="flex justify-between">
+              <div class="h-3 w-20 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
+              <div class="h-3 w-24 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
+            </div>
+            <div class="flex justify-between">
+              <div class="h-3 w-24 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
+              <div class="h-3 w-20 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
+            </div>
+            <div class="flex justify-between">
+              <div class="h-3 w-32 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
+              <div class="h-3 w-10 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div
+        v-else-if="!sensorsLoading && modules.length === 0"
+        class="rounded-lg p-10 text-center"
+        style="background-color: rgba(14, 36, 70, 0.3); border: 1px solid rgba(65, 185, 195, 0.15)"
+      >
+        <WifiOff class="w-10 h-10 mx-auto mb-3" style="color: rgba(150, 238, 242, 0.4)" />
+        <p class="text-white mb-1">No sensors detected</p>
+        <p class="text-sm" style="color: rgba(150, 238, 242, 0.6)">Click "Refresh Sensors" to scan for connected devices.</p>
+      </div>
+
       <!-- Module List -->
-      <div class="space-y-4">
+      <div v-else class="space-y-4">
         <div
           v-for="mod in modules"
           :key="mod.id"
