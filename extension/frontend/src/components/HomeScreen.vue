@@ -34,7 +34,7 @@ const { status: systemStatus, fetchStatus } = useSystemStatus()
 const { battery, fetchBattery } = useBattery()
 const { storage, fetchStorage } = useStorage()
 const { location, fetchLocation } = useLocation()
-const { modules: sensorModules, fetchModules } = useSensors()
+const { modules: sensorModules, loading: sensorsLoading, fetchModules } = useSensors()
 
 const batteryLevel = computed(() => battery.value?.level ?? systemStatus.value?.battery_level ?? 0)
 const batteryVoltage = computed(() => {
@@ -709,7 +709,8 @@ const formatReleaseTime = (date: Date) => {
           class="text-white mb-4 flex items-center gap-2 text-xl"
           style="font-family: 'Montserrat', sans-serif"
         >
-          <Activity class="w-5 h-5" style="color: #96EEF2" />
+          <Loader2 v-if="sensorsLoading" class="w-5 h-5 animate-spin" style="color: #96EEF2" />
+          <Activity v-else class="w-5 h-5" style="color: #96EEF2" />
           Connected Sensors
         </h2>
 
@@ -752,8 +753,36 @@ const formatReleaseTime = (date: Date) => {
           </button>
         </div>
 
+        <!-- Loading skeleton -->
+        <div v-if="sensorsLoading && sortedModules.length === 0" class="space-y-2">
+          <div
+            v-for="i in 4"
+            :key="i"
+            class="rounded-lg p-4 grid grid-cols-2 gap-4 items-center animate-pulse"
+            style="background-color: rgba(14, 36, 70, 0.5)"
+          >
+            <div class="flex items-center gap-3">
+              <div class="w-5 h-5 rounded-full" style="background-color: rgba(150, 238, 242, 0.15)" />
+              <div class="h-4 rounded" :style="{ width: `${100 + i * 20}px`, backgroundColor: 'rgba(150, 238, 242, 0.15)' }" />
+            </div>
+            <div class="flex justify-end">
+              <div class="h-6 w-24 rounded" style="background-color: rgba(150, 238, 242, 0.1)" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div
+          v-else-if="!sensorsLoading && sortedModules.length === 0"
+          class="rounded-lg p-8 text-center"
+          style="background-color: rgba(14, 36, 70, 0.3)"
+        >
+          <WifiOff class="w-8 h-8 mx-auto mb-3" style="color: rgba(150, 238, 242, 0.4)" />
+          <p class="text-sm" style="color: rgba(150, 238, 242, 0.6)">No sensors detected</p>
+        </div>
+
         <!-- Table Rows -->
-        <div class="space-y-2">
+        <div v-else class="space-y-2">
           <div
             v-for="mod in sortedModules"
             :key="mod.id"
