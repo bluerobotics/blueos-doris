@@ -1,6 +1,8 @@
 """Media API routes."""
 
 import json
+import mimetypes
+from urllib.parse import unquote
 
 from robyn import Response, Robyn
 
@@ -17,8 +19,9 @@ def register_media_routes(app: Robyn) -> None:
     async def get_media_files(request):
         """Get list of media files with optional filtering."""
         try:
-            mission_id = request.query_params.get("mission_id")
-            media_type_str = request.query_params.get("type")
+            raw_mission_id = request.query_params.get("mission_id", None)
+            mission_id = unquote(raw_mission_id) if raw_mission_id else None
+            media_type_str = request.query_params.get("type", None)
             limit = int(request.query_params.get("limit", "50"))
             offset = int(request.query_params.get("offset", "0"))
 
@@ -54,6 +57,65 @@ def register_media_routes(app: Robyn) -> None:
                 headers={"Content-Type": "application/json"},
             )
 
+    @app.get("/api/v1/media/download")
+    async def download_file(request):
+        """Download a file by its relative path (passed as ?path=...)."""
+        try:
+            file_path = unquote(request.query_params.get("path", ""))
+            if not file_path:
+                return Response(
+                    status_code=400,
+                    description=json.dumps({"error": "Missing 'path' parameter"}),
+                    headers={"Content-Type": "application/json"},
+                )
+
+            data = await storage_service.get_file(file_path)
+            if data is None:
+                return Response(
+                    status_code=404,
+                    description=json.dumps({"error": "File not found"}),
+                    headers={"Content-Type": "application/json"},
+                )
+
+            content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+            filename = file_path.rsplit("/", 1)[-1]
+
+            return Response(
+                status_code=200,
+                description=data,
+                headers={
+                    "Content-Type": content_type,
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Content-Length": str(len(data)),
+                },
+            )
+        except Exception as e:
+            return Response(
+                status_code=500,
+                description=json.dumps({"error": str(e)}),
+                headers={"Content-Type": "application/json"},
+            )
+
+    @app.delete("/api/v1/media/files")
+    async def delete_file(request):
+        """Delete a media file by its relative path (passed as ?path=...)."""
+        try:
+            file_path = unquote(request.query_params.get("path", ""))
+            if not file_path:
+                return Response(
+                    status_code=400,
+                    description=json.dumps({"error": "Missing 'path' parameter"}),
+                    headers={"Content-Type": "application/json"},
+                )
+            success = await storage_service.delete_file(file_path)
+            return json.dumps({"success": success})
+        except Exception as e:
+            return Response(
+                status_code=500,
+                description=json.dumps({"error": str(e)}),
+                headers={"Content-Type": "application/json"},
+            )
+
     @app.get("/api/v1/media/sync/status")
     async def get_sync_status(request):
         """Get cloud sync status."""
@@ -79,18 +141,3 @@ def register_media_routes(app: Robyn) -> None:
                 description=json.dumps({"error": str(e)}),
                 headers={"Content-Type": "application/json"},
             )
-
-    @app.delete("/api/v1/media/files/:file_id")
-    async def delete_file(request):
-        """Delete a media file."""
-        try:
-            file_id = request.path_params.get("file_id")
-            success = await storage_service.delete_file(file_id)
-            return json.dumps({"success": success})
-        except Exception as e:
-            return Response(
-                status_code=500,
-                description=json.dumps({"error": str(e)}),
-                headers={"Content-Type": "application/json"},
-            )
-
