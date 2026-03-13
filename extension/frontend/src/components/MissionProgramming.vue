@@ -29,12 +29,9 @@ const showNavigationWarning = ref(false)
 const pendingConfigurationChange = ref('')
 const {
   configurations: savedConfigSummaries,
-  saving: savingConfig,
-  error: configError,
   fetchConfigurations,
   loadConfiguration,
   saveConfiguration,
-  deleteConfiguration,
 } = useConfigurations()
 
 const savedConfigurations = computed(() => savedConfigSummaries.value.map(c => c.name))
