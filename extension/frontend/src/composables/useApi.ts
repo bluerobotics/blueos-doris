@@ -184,6 +184,94 @@ export interface SyncStatus {
   error: string | null
 }
 
+// ── Configuration types ─────────────────────────────────────────────
+
+export interface TimeValue {
+  number: string
+  unit: 'seconds' | 'minutes' | 'hours'
+}
+
+export interface CameraSettings {
+  enabled: boolean
+  camera_type: 'continuous-video' | 'timelapse' | 'video-interval'
+  capture_frequency: number
+  capture_frequency_unit: 'seconds' | 'minutes' | 'hours'
+  video_record: TimeValue
+  video_pause: TimeValue
+  resolution: string
+  image_type: string
+  file_format: string
+  video_file_format: string
+  frame_rate: number
+  focus: string
+  iso: string
+  white_balance: string
+  exposure: string
+  sharpness: string
+  sleep_timer_enabled: boolean
+  sleep_timer: TimeValue
+}
+
+export interface LightSettings {
+  enabled: boolean
+  mode: 'continuous' | 'interval'
+  brightness: number
+  match_camera_interval: boolean
+  on_time: TimeValue
+  off_time: TimeValue
+}
+
+export interface DescentPhase {
+  camera: CameraSettings
+  light: LightSettings
+}
+
+export interface BottomPhase {
+  camera: CameraSettings
+  camera_delay: TimeValue
+  light: LightSettings
+  light_delay: TimeValue
+}
+
+export interface ReleaseWeight {
+  method: 'elapsed' | 'datetime'
+  elapsed: TimeValue
+  release_date: string
+  release_time: string
+}
+
+export interface AscentPhase {
+  same_as_descent: boolean
+  camera: CameraSettings
+  light: LightSettings
+  release_weight: ReleaseWeight
+}
+
+export interface RecoverySettings {
+  activate_mast_light: boolean
+  update_frequency: string
+  use_iridium: boolean
+  use_lora: boolean
+}
+
+export interface DeploymentConfiguration {
+  name: string
+  dive_name: string
+  estimated_depth: string
+  descent: DescentPhase
+  bottom: BottomPhase
+  ascent: AscentPhase
+  recovery: RecoverySettings
+  created_at: string
+  updated_at: string
+}
+
+export interface ConfigurationSummary {
+  name: string
+  created_at: string
+  updated_at: string
+}
+
 // ── HTTP helpers ────────────────────────────────────────────────────
 
 async function fetchApi<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
@@ -634,6 +722,84 @@ export function useMedia() {
     downloadFile,
     fetchSyncStatus,
     startSync,
+  }
+}
+
+// ── Configuration composables ───────────────────────────────────────
+
+export function useConfigurations() {
+  const configurations = ref<ConfigurationSummary[]>([])
+  const currentConfig = ref<DeploymentConfiguration | null>(null)
+  const loading = ref(false)
+  const saving = ref(false)
+  const error = ref<string | null>(null)
+
+  async function fetchConfigurations() {
+    loading.value = true
+    error.value = null
+    try {
+      configurations.value = await fetchApi<ConfigurationSummary[]>('/configurations')
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch configurations'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function loadConfiguration(name: string): Promise<DeploymentConfiguration | null> {
+    loading.value = true
+    error.value = null
+    try {
+      currentConfig.value = await fetchApi<DeploymentConfiguration>(
+        `/configurations/${encodeURIComponent(name)}`
+      )
+      return currentConfig.value
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to load configuration'
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function saveConfiguration(config: DeploymentConfiguration): Promise<DeploymentConfiguration | null> {
+    saving.value = true
+    error.value = null
+    try {
+      const saved = await postApi<DeploymentConfiguration>('/configurations', config)
+      currentConfig.value = saved
+      await fetchConfigurations()
+      return saved
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to save configuration'
+      return null
+    } finally {
+      saving.value = false
+    }
+  }
+
+  async function deleteConfiguration(name: string): Promise<boolean> {
+    error.value = null
+    try {
+      await deleteApi(`/configurations/${encodeURIComponent(name)}`)
+      configurations.value = configurations.value.filter(c => c.name !== name)
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to delete configuration'
+      return false
+    }
+  }
+
+  return {
+    configurations: readonly(configurations),
+    currentConfig: readonly(currentConfig),
+    loading: readonly(loading),
+    saving: readonly(saving),
+    error: readonly(error),
+    fetchConfigurations,
+    loadConfiguration,
+    saveConfiguration,
+    deleteConfiguration,
   }
 }
 

@@ -6,11 +6,17 @@ variables, defaulting to the BlueOS data directory mounted into
 the container.
 """
 
+import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..models.configuration import (
+    ConfigurationSummary,
+    DeploymentConfiguration,
+)
 from ..models.media import MediaFile, MediaMission, MediaType, SyncStatus
 
 logger = logging.getLogger(__name__)
@@ -181,6 +187,66 @@ class StorageService:
 
     async def start_sync(self) -> bool:
         """Start sync (placeholder)."""
+        return True
+
+    # ── Configuration management ────────────────────────────────
+
+    @property
+    def _config_dir(self) -> Path:
+        d = self.root / "configurations"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    @staticmethod
+    def _slug(name: str) -> str:
+        """Turn a human-readable name into a safe filename stem."""
+        slug = re.sub(r"[^\w\s-]", "", name.strip().lower())
+        slug = re.sub(r"[\s-]+", "_", slug)
+        return slug or "unnamed"
+
+    async def save_configuration(self, config: DeploymentConfiguration) -> DeploymentConfiguration:
+        """Persist a configuration as JSON. Overwrites if name already exists."""
+        config.updated_at = datetime.now()
+        path = self._config_dir / f"{self._slug(config.name)}.json"
+        path.write_text(config.model_dump_json(indent=2))
+        logger.info(f"Configuration saved: {config.name} -> {path}")
+        return config
+
+    async def load_configuration(self, name: str) -> DeploymentConfiguration | None:
+        """Load a configuration by name."""
+        path = self._config_dir / f"{self._slug(name)}.json"
+        if not path.is_file():
+            return None
+        try:
+            return DeploymentConfiguration.model_validate_json(path.read_text())
+        except Exception as e:
+            logger.warning(f"Failed to parse configuration '{name}': {e}")
+            return None
+
+    async def list_configurations(self) -> list[ConfigurationSummary]:
+        """Return a summary list of all saved configurations."""
+        summaries: list[ConfigurationSummary] = []
+        for path in sorted(self._config_dir.glob("*.json")):
+            try:
+                data = json.loads(path.read_text())
+                summaries.append(
+                    ConfigurationSummary(
+                        name=data["name"],
+                        created_at=data.get("created_at", datetime.now().isoformat()),
+                        updated_at=data.get("updated_at", datetime.now().isoformat()),
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Skipping invalid config file {path.name}: {e}")
+        return summaries
+
+    async def delete_configuration(self, name: str) -> bool:
+        """Delete a configuration by name."""
+        path = self._config_dir / f"{self._slug(name)}.json"
+        if not path.is_file():
+            return False
+        path.unlink()
+        logger.info(f"Configuration deleted: {name}")
         return True
 
     async def close(self) -> None:

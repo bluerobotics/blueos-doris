@@ -8,6 +8,7 @@ from robyn.openapi import Contact, OpenAPI, OpenAPIInfo
 from .config import settings
 from .routes import (
     register_blueos_routes,
+    register_configuration_routes,
     register_media_routes,
     register_mission_routes,
     register_network_routes,
@@ -48,6 +49,7 @@ def create_app() -> Robyn:
     register_sensor_routes(app)
     register_mission_routes(app)
     register_media_routes(app)
+    register_configuration_routes(app)
 
     # Serve frontend static files if they exist
     # Check multiple possible locations for frontend dist

@@ -2,6 +2,8 @@
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { Settings, Save, Copy, AlertTriangle, ChevronDown, ChevronUp, Camera as CameraIcon, Lightbulb, Database as DatabaseIcon, Battery, ArrowDown, Anchor, ArrowUp, Radio, X } from 'lucide-vue-next'
 import type { Screen } from '../types'
+import { useConfigurations } from '../composables/useApi'
+import type { DeploymentConfiguration } from '../composables/useApi'
 
 const props = withDefaults(defineProps<{
   releaseWeightBy: 'datetime' | 'elapsed'
@@ -25,18 +27,17 @@ const configurationName = ref('')
 const hasUnsavedChanges = ref(false)
 const showNavigationWarning = ref(false)
 const pendingConfigurationChange = ref('')
-const savedConfigurations = ref([
-  'DORIS 24 Hour Dive Configuration',
-  'DORIS 12 Hour Dive Configuration',
-  'DORIS 6 Hour Dive Configuration',
-  'DORIS 4 Hour Dive Configuration',
-  'Release Date Time Test',
-  'My Saved Configuration 1',
-  'My Saved Configuration 2',
-  'My Saved Configuration 3',
-  'My Saved Configuration 4',
-  'My Saved Configuration 5'
-])
+const {
+  configurations: savedConfigSummaries,
+  saving: savingConfig,
+  error: configError,
+  fetchConfigurations,
+  loadConfiguration,
+  saveConfiguration,
+  deleteConfiguration,
+} = useConfigurations()
+
+const savedConfigurations = computed(() => savedConfigSummaries.value.map(c => c.name))
 
 const showBrightnessWarning = ref(false)
 const pendingBrightness = ref<{ value: number; phase: 'descent' | 'bottom' | 'ascent' } | null>(null)
@@ -312,6 +313,233 @@ function resetToDefaults() {
   useLoRA.value = false
 }
 
+function buildConfigPayload(name: string): DeploymentConfiguration {
+  return {
+    name,
+    dive_name: diveName.value,
+    estimated_depth: estimatedDepth.value,
+    descent: {
+      camera: {
+        enabled: descentCameraOn.value,
+        camera_type: descentCameraType.value,
+        capture_frequency: descentCaptureFrequency.value,
+        capture_frequency_unit: descentCaptureFrequencyUnit.value as 'seconds' | 'minutes' | 'hours',
+        video_record: { number: descentVideoRecordNumber.value, unit: descentVideoRecordUnit.value as 'seconds' | 'minutes' | 'hours' },
+        video_pause: { number: descentVideoPauseNumber.value, unit: descentVideoPauseUnit.value as 'seconds' | 'minutes' | 'hours' },
+        resolution: descentResolution.value,
+        image_type: descentImageType.value,
+        file_format: descentFileFormat.value,
+        video_file_format: descentVideoFileFormat.value,
+        frame_rate: descentFrameRate.value,
+        focus: descentFocus.value,
+        iso: descentISO.value,
+        white_balance: descentWhiteBalance.value,
+        exposure: descentExposure.value,
+        sharpness: descentSharpness.value,
+        sleep_timer_enabled: descentSleepTimerEnabled.value,
+        sleep_timer: { number: descentSleepTimerNumber.value, unit: descentSleepTimerUnit.value as 'seconds' | 'minutes' | 'hours' },
+      },
+      light: {
+        enabled: descentLightOn.value,
+        mode: descentLightMode.value,
+        brightness: descentLightBrightness.value,
+        match_camera_interval: descentMatchCameraInterval.value,
+        on_time: { number: descentLightOnNumber.value, unit: descentLightOnUnit.value as 'seconds' | 'minutes' | 'hours' },
+        off_time: { number: descentLightOffNumber.value, unit: descentLightOffUnit.value as 'seconds' | 'minutes' | 'hours' },
+      },
+    },
+    bottom: {
+      camera: {
+        enabled: bottomCameraOn.value,
+        camera_type: bottomCameraType.value,
+        capture_frequency: bottomCaptureFrequency.value,
+        capture_frequency_unit: bottomCaptureFrequencyUnit.value as 'seconds' | 'minutes' | 'hours',
+        video_record: { number: bottomVideoRecordNumber.value, unit: bottomVideoRecordUnit.value as 'seconds' | 'minutes' | 'hours' },
+        video_pause: { number: bottomVideoPauseNumber.value, unit: bottomVideoPauseUnit.value as 'seconds' | 'minutes' | 'hours' },
+        resolution: bottomResolution.value,
+        image_type: bottomImageType.value,
+        file_format: bottomFileFormat.value,
+        video_file_format: bottomVideoFileFormat.value,
+        frame_rate: bottomFrameRate.value,
+        focus: bottomFocus.value,
+        iso: bottomISO.value,
+        white_balance: bottomWhiteBalance.value,
+        exposure: bottomExposure.value,
+        sharpness: bottomSharpness.value,
+        sleep_timer_enabled: bottomSleepTimerEnabled.value,
+        sleep_timer: { number: bottomSleepTimerNumber.value, unit: bottomSleepTimerUnit.value as 'seconds' | 'minutes' | 'hours' },
+      },
+      camera_delay: { number: bottomCameraDelayNumber.value, unit: bottomCameraDelayUnit.value as 'seconds' | 'minutes' | 'hours' },
+      light: {
+        enabled: bottomLightOn.value,
+        mode: bottomLightMode.value,
+        brightness: bottomLightBrightness.value,
+        match_camera_interval: bottomMatchCameraInterval.value,
+        on_time: { number: bottomLightOnNumber.value, unit: bottomLightOnUnit.value as 'seconds' | 'minutes' | 'hours' },
+        off_time: { number: bottomLightOffNumber.value, unit: bottomLightOffUnit.value as 'seconds' | 'minutes' | 'hours' },
+      },
+      light_delay: { number: bottomLightDelayNumber.value, unit: bottomLightDelayUnit.value as 'seconds' | 'minutes' | 'hours' },
+    },
+    ascent: {
+      same_as_descent: ascentSameAsDescent.value,
+      camera: {
+        enabled: ascentCameraOn.value,
+        camera_type: ascentCameraType.value,
+        capture_frequency: ascentCaptureFrequency.value,
+        capture_frequency_unit: ascentCaptureFrequencyUnit.value as 'seconds' | 'minutes' | 'hours',
+        video_record: { number: ascentVideoRecordNumber.value, unit: ascentVideoRecordUnit.value as 'seconds' | 'minutes' | 'hours' },
+        video_pause: { number: ascentVideoPauseNumber.value, unit: ascentVideoPauseUnit.value as 'seconds' | 'minutes' | 'hours' },
+        resolution: ascentResolution.value,
+        image_type: ascentImageType.value,
+        file_format: ascentFileFormat.value,
+        video_file_format: ascentVideoFileFormat.value,
+        frame_rate: ascentFrameRate.value,
+        focus: ascentFocus.value,
+        iso: ascentISO.value,
+        white_balance: ascentWhiteBalance.value,
+        exposure: ascentExposure.value,
+        sharpness: ascentSharpness.value,
+        sleep_timer_enabled: ascentSleepTimerEnabled.value,
+        sleep_timer: { number: ascentSleepTimerNumber.value, unit: ascentSleepTimerUnit.value as 'seconds' | 'minutes' | 'hours' },
+      },
+      light: {
+        enabled: ascentLightOn.value,
+        mode: ascentLightMode.value,
+        brightness: ascentLightBrightness.value,
+        match_camera_interval: ascentMatchCameraInterval.value,
+        on_time: { number: ascentLightOnNumber.value, unit: ascentLightOnUnit.value as 'seconds' | 'minutes' | 'hours' },
+        off_time: { number: ascentLightOffNumber.value, unit: ascentLightOffUnit.value as 'seconds' | 'minutes' | 'hours' },
+      },
+      release_weight: {
+        method: props.releaseWeightBy,
+        elapsed: { number: releaseWeightElapsedNumber.value, unit: releaseWeightElapsedUnit.value as 'seconds' | 'minutes' | 'hours' },
+        release_date: releaseWeightDate.value,
+        release_time: releaseWeightTime.value,
+      },
+    },
+    recovery: {
+      activate_mast_light: activateMastLight.value,
+      update_frequency: updateFrequency.value,
+      use_iridium: useIridium.value,
+      use_lora: useLoRA.value,
+    },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+}
+
+function applyConfig(cfg: DeploymentConfiguration) {
+  diveName.value = cfg.dive_name
+  estimatedDepth.value = cfg.estimated_depth
+
+  descentCameraOn.value = cfg.descent.camera.enabled
+  descentCameraType.value = cfg.descent.camera.camera_type
+  descentCaptureFrequency.value = cfg.descent.camera.capture_frequency
+  descentCaptureFrequencyUnit.value = cfg.descent.camera.capture_frequency_unit
+  descentVideoRecordNumber.value = cfg.descent.camera.video_record.number
+  descentVideoRecordUnit.value = cfg.descent.camera.video_record.unit
+  descentVideoPauseNumber.value = cfg.descent.camera.video_pause.number
+  descentVideoPauseUnit.value = cfg.descent.camera.video_pause.unit
+  descentResolution.value = cfg.descent.camera.resolution
+  descentImageType.value = cfg.descent.camera.image_type
+  descentFileFormat.value = cfg.descent.camera.file_format
+  descentVideoFileFormat.value = cfg.descent.camera.video_file_format
+  descentFrameRate.value = cfg.descent.camera.frame_rate
+  descentFocus.value = cfg.descent.camera.focus
+  descentISO.value = cfg.descent.camera.iso
+  descentWhiteBalance.value = cfg.descent.camera.white_balance
+  descentExposure.value = cfg.descent.camera.exposure
+  descentSharpness.value = cfg.descent.camera.sharpness
+  descentSleepTimerEnabled.value = cfg.descent.camera.sleep_timer_enabled
+  descentSleepTimerNumber.value = cfg.descent.camera.sleep_timer.number
+  descentSleepTimerUnit.value = cfg.descent.camera.sleep_timer.unit
+  descentLightOn.value = cfg.descent.light.enabled
+  descentLightMode.value = cfg.descent.light.mode
+  descentLightBrightness.value = cfg.descent.light.brightness
+  descentMatchCameraInterval.value = cfg.descent.light.match_camera_interval
+  descentLightOnNumber.value = cfg.descent.light.on_time.number
+  descentLightOnUnit.value = cfg.descent.light.on_time.unit
+  descentLightOffNumber.value = cfg.descent.light.off_time.number
+  descentLightOffUnit.value = cfg.descent.light.off_time.unit
+
+  bottomCameraOn.value = cfg.bottom.camera.enabled
+  bottomCameraDelayNumber.value = cfg.bottom.camera_delay.number
+  bottomCameraDelayUnit.value = cfg.bottom.camera_delay.unit
+  bottomCameraType.value = cfg.bottom.camera.camera_type
+  bottomCaptureFrequency.value = cfg.bottom.camera.capture_frequency
+  bottomCaptureFrequencyUnit.value = cfg.bottom.camera.capture_frequency_unit
+  bottomVideoRecordNumber.value = cfg.bottom.camera.video_record.number
+  bottomVideoRecordUnit.value = cfg.bottom.camera.video_record.unit
+  bottomVideoPauseNumber.value = cfg.bottom.camera.video_pause.number
+  bottomVideoPauseUnit.value = cfg.bottom.camera.video_pause.unit
+  bottomResolution.value = cfg.bottom.camera.resolution
+  bottomImageType.value = cfg.bottom.camera.image_type
+  bottomFileFormat.value = cfg.bottom.camera.file_format
+  bottomVideoFileFormat.value = cfg.bottom.camera.video_file_format
+  bottomFrameRate.value = cfg.bottom.camera.frame_rate
+  bottomFocus.value = cfg.bottom.camera.focus
+  bottomISO.value = cfg.bottom.camera.iso
+  bottomWhiteBalance.value = cfg.bottom.camera.white_balance
+  bottomExposure.value = cfg.bottom.camera.exposure
+  bottomSharpness.value = cfg.bottom.camera.sharpness
+  bottomSleepTimerEnabled.value = cfg.bottom.camera.sleep_timer_enabled
+  bottomSleepTimerNumber.value = cfg.bottom.camera.sleep_timer.number
+  bottomSleepTimerUnit.value = cfg.bottom.camera.sleep_timer.unit
+  bottomLightOn.value = cfg.bottom.light.enabled
+  bottomLightDelayNumber.value = cfg.bottom.light_delay.number
+  bottomLightDelayUnit.value = cfg.bottom.light_delay.unit
+  bottomLightMode.value = cfg.bottom.light.mode
+  bottomLightBrightness.value = cfg.bottom.light.brightness
+  bottomMatchCameraInterval.value = cfg.bottom.light.match_camera_interval
+  bottomLightOnNumber.value = cfg.bottom.light.on_time.number
+  bottomLightOnUnit.value = cfg.bottom.light.on_time.unit
+  bottomLightOffNumber.value = cfg.bottom.light.off_time.number
+  bottomLightOffUnit.value = cfg.bottom.light.off_time.unit
+
+  ascentSameAsDescent.value = cfg.ascent.same_as_descent
+  ascentCameraOn.value = cfg.ascent.camera.enabled
+  ascentCameraType.value = cfg.ascent.camera.camera_type
+  ascentCaptureFrequency.value = cfg.ascent.camera.capture_frequency
+  ascentCaptureFrequencyUnit.value = cfg.ascent.camera.capture_frequency_unit
+  ascentVideoRecordNumber.value = cfg.ascent.camera.video_record.number
+  ascentVideoRecordUnit.value = cfg.ascent.camera.video_record.unit
+  ascentVideoPauseNumber.value = cfg.ascent.camera.video_pause.number
+  ascentVideoPauseUnit.value = cfg.ascent.camera.video_pause.unit
+  ascentResolution.value = cfg.ascent.camera.resolution
+  ascentImageType.value = cfg.ascent.camera.image_type
+  ascentFileFormat.value = cfg.ascent.camera.file_format
+  ascentVideoFileFormat.value = cfg.ascent.camera.video_file_format
+  ascentFrameRate.value = cfg.ascent.camera.frame_rate
+  ascentFocus.value = cfg.ascent.camera.focus
+  ascentISO.value = cfg.ascent.camera.iso
+  ascentWhiteBalance.value = cfg.ascent.camera.white_balance
+  ascentExposure.value = cfg.ascent.camera.exposure
+  ascentSharpness.value = cfg.ascent.camera.sharpness
+  ascentSleepTimerEnabled.value = cfg.ascent.camera.sleep_timer_enabled
+  ascentSleepTimerNumber.value = cfg.ascent.camera.sleep_timer.number
+  ascentSleepTimerUnit.value = cfg.ascent.camera.sleep_timer.unit
+  ascentLightOn.value = cfg.ascent.light.enabled
+  ascentLightMode.value = cfg.ascent.light.mode
+  ascentLightBrightness.value = cfg.ascent.light.brightness
+  ascentMatchCameraInterval.value = cfg.ascent.light.match_camera_interval
+  ascentLightOnNumber.value = cfg.ascent.light.on_time.number
+  ascentLightOnUnit.value = cfg.ascent.light.on_time.unit
+  ascentLightOffNumber.value = cfg.ascent.light.off_time.number
+  ascentLightOffUnit.value = cfg.ascent.light.off_time.unit
+  releaseWeightElapsedNumber.value = cfg.ascent.release_weight.elapsed.number
+  releaseWeightElapsedUnit.value = cfg.ascent.release_weight.elapsed.unit
+  releaseWeightDate.value = cfg.ascent.release_weight.release_date
+  releaseWeightTime.value = cfg.ascent.release_weight.release_time
+  emit('update:releaseWeightBy', cfg.ascent.release_weight.method)
+
+  activateMastLight.value = cfg.recovery.activate_mast_light
+  updateFrequency.value = cfg.recovery.update_frequency
+  useIridium.value = cfg.recovery.use_iridium
+  useLoRA.value = cfg.recovery.use_lora
+
+  hasUnsavedChanges.value = false
+}
+
 function generateNextConfigName(baseName: string): string {
   const match = baseName.match(/^(.*?)(\d+)?$/)
   if (!match) return `${baseName} 2`
@@ -326,9 +554,13 @@ function generateNextConfigName(baseName: string): string {
   return proposedName
 }
 
-function handleSaveConfiguration() {
-  if (configurationName.value.trim()) {
-    savedConfigurations.value.push(configurationName.value.trim())
+async function handleSaveConfiguration() {
+  const name = configurationName.value.trim()
+  if (!name) return
+  const payload = buildConfigPayload(name)
+  const saved = await saveConfiguration(payload)
+  if (saved) {
+    selectedConfiguration.value = name
     configurationName.value = ''
     showSaveModal.value = false
     hasUnsavedChanges.value = false
@@ -341,13 +573,19 @@ function handleSaveConfiguration() {
   }
 }
 
-function handleDiscardChanges() {
+async function handleDiscardChanges() {
   hasUnsavedChanges.value = false
   showNavigationWarning.value = false
   if (pendingConfigurationChange.value) {
-    selectedConfiguration.value = pendingConfigurationChange.value
-    if (pendingConfigurationChange.value === 'New Configuration') resetToDefaults()
+    const target = pendingConfigurationChange.value
     pendingConfigurationChange.value = ''
+    selectedConfiguration.value = target
+    if (target === 'New Configuration') {
+      resetToDefaults()
+    } else {
+      const cfg = await loadConfiguration(target)
+      if (cfg) applyConfig(cfg)
+    }
   }
 }
 
@@ -361,18 +599,20 @@ function handleOpenSaveModal() {
   configurationName.value = ''
 }
 
-function handleConfigurationChange(value: string) {
+async function handleConfigurationChange(value: string) {
   if (hasUnsavedChanges.value && selectedConfiguration.value === 'New Configuration' && value !== selectedConfiguration.value) {
     pendingConfigurationChange.value = value
     showNavigationWarning.value = true
-  } else {
-    selectedConfiguration.value = value
-    if (value === 'New Configuration') resetToDefaults()
-    if (value === 'Release Date Time Test') {
-      emit('update:releaseWeightBy', 'datetime')
-    } else if (value !== '') {
-      emit('update:releaseWeightBy', 'elapsed')
-    }
+    return
+  }
+  selectedConfiguration.value = value
+  if (value === 'New Configuration') {
+    resetToDefaults()
+    return
+  }
+  if (value && value !== '') {
+    const cfg = await loadConfiguration(value)
+    if (cfg) applyConfig(cfg)
   }
 }
 
@@ -495,6 +735,7 @@ function handleBeforeUnload(e: BeforeUnloadEvent) {
 
 onMounted(() => {
   window.addEventListener('beforeunload', handleBeforeUnload)
+  fetchConfigurations()
 })
 
 onUnmounted(() => {

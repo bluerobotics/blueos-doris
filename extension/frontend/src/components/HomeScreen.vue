@@ -14,7 +14,7 @@ import {
   Loader2
 } from 'lucide-vue-next'
 import { mdiCompassOutline } from '@mdi/js'
-import { useSystemStatus, useBattery, useStorage, useLocation, useSensors } from '../composables/useApi'
+import { useSystemStatus, useBattery, useStorage, useLocation, useSensors, useConfigurations } from '../composables/useApi'
 import type { SensorModule } from '../composables/useApi'
 import type { Screen } from '../types'
 
@@ -73,6 +73,7 @@ onMounted(() => {
   fetchStorage()
   fetchLocation()
   fetchModules()
+  fetchConfigurations()
   pollInterval = setInterval(() => {
     fetchStatus()
     fetchBattery()
@@ -100,18 +101,8 @@ const isCheckingLeaks = ref(false)
 
 const previousUsernames = ['Captain Smith', 'Dr. Johnson', 'Prof. Lee', 'Researcher Chen']
 
-const savedConfigurations = [
-  'DORIS 24 Hour Dive Configuration',
-  'DORIS 12 Hour Dive Configuration',
-  'DORIS 6 Hour Dive Configuration',
-  'DORIS 4 Hour Dive Configuration',
-  'Release Date Time Test',
-  'My Saved Configuration 1',
-  'My Saved Configuration 2',
-  'My Saved Configuration 3',
-  'My Saved Configuration 4',
-  'My Saved Configuration 5'
-]
+const { configurations: savedConfigSummaries, fetchConfigurations } = useConfigurations()
+const savedConfigurations = computed(() => savedConfigSummaries.value.map(c => c.name))
 
 const configurationElapsedTimes: Record<string, number> = {
   'DORIS 24 Hour Dive Configuration': 24,
