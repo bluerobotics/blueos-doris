@@ -13,7 +13,7 @@ SERVICE_METADATA = {
     "version": "1.0.0",
     "webpage": "/",
     "api": "/docs",
-    "new_page": False,
+    "new_page": True,
 }
 
 
