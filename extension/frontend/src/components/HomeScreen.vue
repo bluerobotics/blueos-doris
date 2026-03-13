@@ -700,7 +700,7 @@ const formatReleaseTime = (date: Date) => {
           class="text-white mb-4 flex items-center gap-2 text-xl"
           style="font-family: 'Montserrat', sans-serif"
         >
-          <Loader2 v-if="sensorsLoading" class="w-5 h-5 animate-spin" style="color: #96EEF2" />
+          <Loader2 v-if="sensorsLoading && sortedModules.length === 0" class="w-5 h-5 animate-spin" style="color: #96EEF2" />
           <Activity v-else class="w-5 h-5" style="color: #96EEF2" />
           Connected Sensors
         </h2>
