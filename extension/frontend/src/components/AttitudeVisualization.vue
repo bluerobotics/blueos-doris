@@ -1,43 +1,135 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { Wifi, WifiOff } from 'lucide-vue-next'
 import { useAttitudeWs } from '../composables/useAttitudeWs'
 
 const MODEL_PATH = '/models/VECTORED_6DOF.glb'
+const LERP = 0.15
 
 const { attitude, connected } = useAttitudeWs()
+const canvasContainer = ref<HTMLDivElement | null>(null)
 
-onMounted(() => {
-  import('@google/model-viewer')
-})
+let scene: THREE.Scene
+let camera: THREE.PerspectiveCamera
+let renderer: THREE.WebGLRenderer
+let controls: OrbitControls
+let vehicleModel: THREE.Object3D | null = null
+let animationId: number
 
-const orientationStr = computed(() => {
-  if (!attitude.value) return '0deg 0deg 0deg'
-  return `${attitude.value.roll_deg}deg ${-attitude.value.pitch_deg}deg ${-attitude.value.yaw_deg}deg`
-})
+const smooth = { roll: 0, pitch: 0, yaw: 0 }
+
+function initScene() {
+  if (!canvasContainer.value) return
+  const w = canvasContainer.value.clientWidth
+  const h = canvasContainer.value.clientHeight
+
+  scene = new THREE.Scene()
+  scene.background = new THREE.Color(0x0a1628)
+  scene.fog = new THREE.Fog(0x0a1628, 15, 30)
+
+  camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100)
+  camera.position.set(4, 3, 4)
+  camera.lookAt(0, 0, 0)
+
+  renderer = new THREE.WebGLRenderer({ antialias: true })
+  renderer.setSize(w, h)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  canvasContainer.value.appendChild(renderer.domElement)
+
+  controls = new OrbitControls(camera, renderer.domElement)
+  controls.enableDamping = true
+  controls.dampingFactor = 0.05
+  controls.minDistance = 2
+  controls.maxDistance = 15
+  controls.enablePan = false
+
+  scene.add(new THREE.AmbientLight(0x404060, 0.8))
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2)
+  sun.position.set(5, 8, 5)
+  scene.add(sun)
+  const fill = new THREE.DirectionalLight(0x41B9C3, 0.3)
+  fill.position.set(-3, 2, -3)
+  scene.add(fill)
+
+  const draco = new DRACOLoader()
+  draco.setDecoderPath('/draco/')
+  const loader = new GLTFLoader()
+  loader.setDRACOLoader(draco)
+
+  loader.load(MODEL_PATH, (gltf) => {
+    const model = gltf.scene
+    const box = new THREE.Box3().setFromObject(model)
+    const size = box.getSize(new THREE.Vector3())
+    const scale = 3 / Math.max(size.x, size.y, size.z)
+    model.scale.setScalar(scale)
+    const center = box.getCenter(new THREE.Vector3())
+    model.position.set(-center.x * scale, -center.y * scale, -center.z * scale)
+    vehicleModel = model
+    scene.add(vehicleModel)
+  })
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(2.5, 0.012, 8, 128),
+    new THREE.MeshBasicMaterial({ color: 0x41B9C3, transparent: true, opacity: 0.25 }),
+  )
+  ring.rotation.x = Math.PI / 2
+  scene.add(ring)
+  scene.add(new THREE.GridHelper(6, 12, 0x1a3a5c, 0x0d2035))
+
+  animate()
+}
+
+function animate() {
+  animationId = requestAnimationFrame(animate)
+
+  if (attitude.value && vehicleModel) {
+    smooth.roll += (attitude.value.roll_rad - smooth.roll) * LERP
+    smooth.pitch += (attitude.value.pitch_rad - smooth.pitch) * LERP
+    smooth.yaw += (attitude.value.yaw_rad - smooth.yaw) * LERP
+    vehicleModel.rotation.set(-smooth.pitch, -smooth.yaw, smooth.roll, 'ZYX')
+  }
+
+  controls.update()
+  renderer.render(scene, camera)
+}
+
+function handleResize() {
+  if (!canvasContainer.value || !camera || !renderer) return
+  const w = canvasContainer.value.clientWidth
+  const h = canvasContainer.value.clientHeight
+  camera.aspect = w / h
+  camera.updateProjectionMatrix()
+  renderer.setSize(w, h)
+}
 
 function formatValue(value: number): string {
   const sign = value >= 0 ? '+' : ''
   return `${sign}${value.toFixed(1)}`
 }
+
+onMounted(() => {
+  initScene()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  if (animationId) cancelAnimationFrame(animationId)
+  if (renderer) {
+    renderer.dispose()
+    renderer.domElement.remove()
+  }
+  if (controls) controls.dispose()
+})
 </script>
 
 <template>
   <div class="relative w-full h-full">
-    <model-viewer
-      :src="MODEL_PATH"
-      :orientation="orientationStr"
-      camera-controls
-      disable-zoom
-      interaction-prompt="none"
-      camera-orbit="45deg 65deg 2.5m"
-      min-camera-orbit="auto auto 1.5m"
-      max-camera-orbit="auto auto 5m"
-      shadow-intensity="0.3"
-      exposure="1.2"
-      interpolation-decay="50"
-      style="width: 100%; height: 100%; --poster-color: transparent;"
-    />
+    <div ref="canvasContainer" class="w-full h-full" />
 
     <!-- Connection badge -->
     <div
