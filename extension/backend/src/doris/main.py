@@ -10,6 +10,7 @@ from .routes import (
     register_attitude_routes,
     register_blueos_routes,
     register_configuration_routes,
+    register_dive_routes,
     register_media_routes,
     register_mission_routes,
     register_network_routes,
@@ -51,6 +52,7 @@ def create_app() -> Robyn:
     register_mission_routes(app)
     register_media_routes(app)
     register_configuration_routes(app)
+    register_dive_routes(app)
 
     # Register WebSocket routes
     register_attitude_routes(app)
