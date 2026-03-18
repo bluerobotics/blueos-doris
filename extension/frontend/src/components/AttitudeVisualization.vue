@@ -13,7 +13,7 @@ onMounted(() => {
 
 const orientationStr = computed(() => {
   if (!attitude.value) return '0deg 0deg 0deg'
-  return `${attitude.value.pitch_deg}deg ${attitude.value.yaw_deg}deg ${attitude.value.roll_deg}deg`
+  return `${attitude.value.roll_deg}deg ${-attitude.value.pitch_deg}deg ${-attitude.value.yaw_deg}deg`
 })
 
 function formatValue(value: number): string {
