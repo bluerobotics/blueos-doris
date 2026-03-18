@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { Screen, DiveData } from './types'
+import { useDiveControl } from './composables/useApi'
 import Navigation from './components/Navigation.vue'
 import Footer from './components/Footer.vue'
 import HomeScreen from './components/HomeScreen.vue'
@@ -17,8 +18,19 @@ import ViewMediaScreen from './components/ViewMediaScreen.vue'
 const currentScreen = ref<Screen>('home')
 const previousScreen = ref<Screen>('media')
 const isConnected = ref(false)
-const isDiveActive = ref(false)
 const targetSensor = ref<string | null>(null)
+
+const { status: diveStatus, fetchDiveStatus } = useDiveControl()
+const isDiveActive = computed(() => diveStatus.value?.active === true)
+
+let divePolling: number | undefined
+onMounted(() => {
+  fetchDiveStatus()
+  divePolling = setInterval(fetchDiveStatus, 5000) as unknown as number
+})
+onUnmounted(() => {
+  if (divePolling) clearInterval(divePolling)
+})
 const selectedDiveData = ref<DiveData | null>(null)
 const releaseWeightBy = ref<'datetime' | 'elapsed'>('elapsed')
 const selectedConfigFromDashboard = ref('')
@@ -74,7 +86,6 @@ const setConnected = (connected: boolean) => {
         v-if="currentScreen === 'home'"
         :is-connected="isConnected"
         @navigate="handleNavigate"
-        @start-dive="isDiveActive = true"
         :release-weight-by="releaseWeightBy"
         @release-weight-by-change="releaseWeightBy = $event"
         @configuration-select="selectedConfigFromDashboard = $event"

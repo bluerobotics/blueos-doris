@@ -803,6 +803,67 @@ export function useConfigurations() {
   }
 }
 
+// ── Dive control composables ────────────────────────────────────────
+
+export interface DiveStatus {
+  param: string
+  value: number | null
+  active: boolean
+}
+
+export function useDiveControl() {
+  const status = ref<DiveStatus | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  async function startDive(): Promise<boolean> {
+    loading.value = true
+    error.value = null
+    try {
+      const result = await postApi<{ success: boolean; message: string }>('/dive/start')
+      if (result.success) await fetchDiveStatus()
+      return result.success
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to start dive'
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function stopDive(): Promise<boolean> {
+    loading.value = true
+    error.value = null
+    try {
+      const result = await postApi<{ success: boolean; message: string }>('/dive/stop')
+      if (result.success) await fetchDiveStatus()
+      return result.success
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to stop dive'
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchDiveStatus() {
+    try {
+      status.value = await fetchApi<DiveStatus>('/dive/status')
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch dive status'
+    }
+  }
+
+  return {
+    status: readonly(status),
+    loading: readonly(loading),
+    error: readonly(error),
+    startDive,
+    stopDive,
+    fetchDiveStatus,
+  }
+}
+
 // ── Health check ────────────────────────────────────────────────────
 
 export async function checkHealth(): Promise<boolean> {
