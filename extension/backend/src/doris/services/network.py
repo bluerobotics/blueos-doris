@@ -181,6 +181,67 @@ class NetworkService:
             return "5GHz"
         return "2.4GHz"
 
+    async def configure_hotspot(
+        self,
+        ssid: str = "DORIS",
+        password: str = "blueosap",
+    ) -> None:
+        """Configure the secondary WiFi interface as a hotspot.
+
+        Prefers dual mode (client + hotspot) when supported, otherwise
+        falls back to hotspot-only. Sets hotspot credentials on the
+        secondary interface.
+        """
+        interfaces_data = await self._client.list_interfaces()
+        if not interfaces_data:
+            logger.warning("No WiFi interfaces found (v2 API unavailable)")
+            return
+
+        interfaces = interfaces_data.get("interfaces", [])
+        if len(interfaces) < 2:
+            logger.info("Only %d WiFi interface(s) found, skipping hotspot config", len(interfaces))
+            return
+
+        secondary = interfaces[1]
+        iface_name = secondary["name"]
+        logger.info("Configuring secondary WiFi interface: %s", iface_name)
+
+        try:
+            await self._client.set_hotspot_credentials(ssid, password, interface=iface_name)
+            logger.info("Hotspot credentials set: SSID=%s on %s", ssid, iface_name)
+        except Exception as e:
+            logger.warning("Failed to set hotspot credentials: %s", e)
+
+        try:
+            mode_info = await self._client.get_interface_mode(iface_name)
+            if not mode_info:
+                logger.warning("Could not query mode for %s", iface_name)
+                return
+
+            available = mode_info.get("available_modes", [])
+            current = mode_info.get("current_mode")
+
+            # Build ordered list of modes to try: prefer dual, fall back to hotspot
+            modes_to_try = [m for m in ("dual", "hotspot") if m in available]
+            if not modes_to_try:
+                logger.warning("Interface %s supports neither dual nor hotspot mode (available: %s)", iface_name, available)
+                return
+
+            for mode in modes_to_try:
+                if current == mode:
+                    logger.info("Interface %s already in %s mode", iface_name, mode)
+                    return
+                try:
+                    await self._client.set_interface_mode(iface_name, mode)
+                    logger.info("Interface %s set to %s mode", iface_name, mode)
+                    return
+                except Exception as e:
+                    logger.warning("Failed to set %s mode on %s: %s", mode, iface_name, e)
+
+            logger.warning("All mode attempts failed for %s", iface_name)
+        except Exception as e:
+            logger.warning("Failed to configure mode for %s: %s", iface_name, e)
+
     async def close(self) -> None:
         """Close HTTP clients."""
         await self._client.close()

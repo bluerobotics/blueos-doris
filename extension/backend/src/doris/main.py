@@ -1,11 +1,13 @@
 """DORIS Backend - Main application entry point."""
 
+import logging
 import os
 
 from robyn import ALLOW_CORS, Robyn
 from robyn.openapi import Contact, OpenAPI, OpenAPIInfo
 
 from .config import settings
+from .services.network import NetworkService
 from .routes import (
     register_attitude_routes,
     register_blueos_routes,
@@ -56,6 +58,17 @@ def create_app() -> Robyn:
 
     # Register WebSocket routes
     register_attitude_routes(app)
+
+    # Configure secondary WiFi interface as hotspot on startup
+    logger = logging.getLogger(__name__)
+
+    @app.startup_handler
+    async def on_startup():
+        network_service = NetworkService()
+        try:
+            await network_service.configure_hotspot()
+        except Exception as e:
+            logger.warning("Hotspot configuration skipped: %s", e)
 
     # Serve frontend static files if they exist
     # Check multiple possible locations for frontend dist

@@ -207,10 +207,14 @@ class NetworkClient:
             return await self._v2.get_hotspot_credentials()
         return await self._v1.get_hotspot_credentials()
 
-    async def set_hotspot_credentials(self, ssid: str, password: str) -> Any:
+    async def set_hotspot_credentials(
+        self, ssid: str, password: str, *, interface: str | None = None,
+    ) -> Any:
         """Set hotspot credentials."""
         if await self._detect_version():
-            return await self._v2.wifi_hotspot_set_credentials(ssid, password)
+            return await self._v2.wifi_hotspot_set_credentials(
+                ssid, password, interface=interface,
+            )
         return await self._v1.set_hotspot_credentials(ssid, password)
 
     async def get_smart_hotspot(self) -> bool:

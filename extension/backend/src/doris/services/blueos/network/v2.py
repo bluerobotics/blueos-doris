@@ -217,11 +217,17 @@ class NetworkV2Client:
             self._path("/wifi/hotspot/disable"), json=payload
         )
 
-    async def wifi_hotspot_set_credentials(self, ssid: str, password: str) -> Any:
+    async def wifi_hotspot_set_credentials(
+        self, ssid: str, password: str, *, interface: str | None = None,
+    ) -> Any:
         """Set hotspot credentials (v2 endpoint)."""
+        payload: dict[str, Any] = {
+            "credentials": {"ssid": ssid, "password": password},
+        }
+        if interface:
+            payload["interface"] = interface
         return await self._client.post(
-            self._path("/wifi/hotspot/credentials"),
-            json={"ssid": ssid, "password": password},
+            self._path("/wifi/hotspot/credentials"), json=payload,
         )
 
     # ── v2-only: Interface mode ──────────────────────────────────────
