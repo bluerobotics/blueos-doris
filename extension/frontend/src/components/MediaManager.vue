@@ -6,7 +6,6 @@ import {
   ChevronLeft, ChevronRight, Loader2, AlertCircle
 } from 'lucide-vue-next'
 import { useMedia, useStorage } from '../composables/useApi'
-import type { Screen } from '../types'
 
 interface DisplayFile {
   id: string
@@ -18,10 +17,6 @@ interface DisplayFile {
   timestamp: string
   downloadUrl: string
 }
-
-const emit = defineEmits<{
-  navigate: [screen: Screen, diveData?: { name: string; date: string; duration: string; maxDepth: string; location: string }]
-}>()
 
 const { files: apiFiles, loading: mediaLoading, error: mediaError, fetchFiles, deleteFile, downloadFile } = useMedia()
 const { storage, loading: storageLoading, error: storageError, fetchStorage } = useStorage()
