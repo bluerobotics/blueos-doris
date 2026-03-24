@@ -189,16 +189,6 @@ const handleSelectAll = () => {
   }
 }
 
-const handleViewMedia = (file: DisplayFile) => {
-  emit('navigate', 'viewmedia', {
-    name: file.diveName,
-    date: file.date,
-    duration: '',
-    maxDepth: '',
-    location: ''
-  })
-}
-
 const confirmDelete = async () => {
   isDeleting.value = true
   for (const fileId of selectedFiles.value) {
