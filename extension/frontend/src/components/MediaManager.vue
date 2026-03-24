@@ -452,14 +452,16 @@ const handlePageChange = (page: number) => {
               <td class="p-3" style="color: #96EEF2">{{ file.size }}</td>
               <td class="p-3">
                 <div class="flex justify-end gap-2">
-                  <button
-                    @click="handleViewMedia(file)"
-                    class="px-3 py-1.5 rounded-lg transition-all hover:opacity-80 flex items-center gap-2 text-sm"
-                    style="background-color: #FF9937; color: white"
-                  >
-                    <Play class="w-3.5 h-3.5" />
-                    View
-                  </button>
+                  <span title="Work in progress">
+                    <button
+                      disabled
+                      class="px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm opacity-40 cursor-not-allowed pointer-events-none"
+                      style="background-color: #FF9937; color: white"
+                    >
+                      <Play class="w-3.5 h-3.5" />
+                      View
+                    </button>
+                  </span>
                   <button
                     @click="handleDownloadSingle(file)"
                     class="px-3 py-1.5 rounded-lg transition-all hover:opacity-80 flex items-center gap-2 text-sm"
@@ -576,14 +578,16 @@ const handlePageChange = (page: number) => {
                 <span>{{ file.size }}</span>
               </div>
               <div class="flex gap-2">
-                <button
-                  @click="handleViewMedia(file)"
-                  class="flex-1 px-3 py-2 rounded-lg transition-all hover:opacity-80 flex items-center justify-center gap-2 text-sm"
-                  style="background-color: #FF9937; color: white"
-                >
-                  <Play class="w-3.5 h-3.5" />
-                  View
-                </button>
+                <span class="flex-1" title="Work in progress">
+                  <button
+                    disabled
+                    class="w-full px-3 py-2 rounded-lg flex items-center justify-center gap-2 text-sm opacity-40 cursor-not-allowed pointer-events-none"
+                    style="background-color: #FF9937; color: white"
+                  >
+                    <Play class="w-3.5 h-3.5" />
+                    View
+                  </button>
+                </span>
                 <button
                   @click="handleDownloadSingle(file)"
                   class="flex-1 px-3 py-2 rounded-lg transition-all hover:opacity-80 flex items-center justify-center gap-2 text-sm"
