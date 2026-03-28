@@ -20,7 +20,7 @@ from .routes import (
     register_sensor_routes,
     register_system_routes,
 )
-from .utils import deploy_artemis_svl, deploy_lua_scripts
+from .utils import deploy_artemis_svl, deploy_lua_scripts, restart_firmware
 
 
 def create_app() -> Robyn:
@@ -67,8 +67,11 @@ def create_app() -> Robyn:
 
     @app.startup_handler
     async def on_startup():
-        deploy_lua_scripts(logger)
+        lua_deployed = deploy_lua_scripts(logger)
         deploy_artemis_svl(logger)
+
+        if lua_deployed:
+            await restart_firmware(logger)
 
         network_service = NetworkService()
         try:

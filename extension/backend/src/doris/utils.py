@@ -1,8 +1,13 @@
 """DORIS Backend - Utility functions for script deployment."""
 
+import hashlib
 import logging
 import shutil
 from pathlib import Path
+
+import httpx
+
+from .config import blueos_services
 
 FIRMWARE_DIR = Path("/tmp/storage/firmware")
 SCRIPTS_DIR = FIRMWARE_DIR / "scripts"
@@ -14,11 +19,14 @@ SCRIPT_SEARCH_PATHS = [
 ]
 
 
-def deploy_lua_scripts(logger: logging.Logger) -> None:
-    """Copy doris.lua into the ArduPilot scripts folder if the firmware bind-mount exists."""
+def deploy_lua_scripts(logger: logging.Logger) -> bool:
+    """Copy doris.lua into the ArduPilot scripts folder if the firmware bind-mount exists.
+
+    Returns True if the script was deployed (changed on disk), False otherwise.
+    """
     if not FIRMWARE_DIR.is_dir():
         logger.info("Firmware directory %s not found, skipping Lua script deployment", FIRMWARE_DIR)
-        return
+        return False
 
     src: Path | None = None
     for candidate in SCRIPT_SEARCH_PATHS:
@@ -29,15 +37,35 @@ def deploy_lua_scripts(logger: logging.Logger) -> None:
 
     if src is None:
         logger.warning("doris.lua not found in any search path: %s", SCRIPT_SEARCH_PATHS)
-        return
+        return False
 
     try:
         SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
         dest = SCRIPTS_DIR / "doris.lua"
+        src_hash = hashlib.sha256(src.read_bytes()).hexdigest()
+        if dest.is_file():
+            dest_hash = hashlib.sha256(dest.read_bytes()).hexdigest()
+            if src_hash == dest_hash:
+                logger.info("doris.lua already up to date (sha256=%s…)", src_hash[:12])
+                return False
         shutil.copy2(src, dest)
         logger.info("Deployed %s -> %s", src, dest)
+        return True
     except Exception as e:
         logger.warning("Failed to deploy doris.lua: %s", e)
+        return False
+
+
+async def restart_firmware(logger: logging.Logger) -> None:
+    """Restart the autopilot firmware so it picks up new Lua scripts."""
+    url = f"{blueos_services.autopilot_manager}/v1.0/restart"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url)
+            resp.raise_for_status()
+        logger.info("Firmware restart command sent successfully")
+    except Exception as e:
+        logger.warning("Failed to restart firmware: %s", e)
 
 
 def deploy_artemis_svl(logger: logging.Logger) -> None:
