@@ -46,7 +46,20 @@ const batteryVoltage = computed(() => {
 const storageUsed = computed(() => storage.value?.used_percent ?? systemStatus.value?.storage_used_percent ?? 0)
 const storageTotal = computed(() => storage.value?.total_gb ?? systemStatus.value?.storage_total_gb ?? 100)
 const storageAvailableGb = computed(() => storage.value?.available_gb ?? (storageTotal.value - (storage.value?.used_gb ?? systemStatus.value?.storage_used_gb ?? 0)))
-const batteryTimeRemaining = computed(() => battery.value?.time_remaining ?? systemStatus.value?.battery_time_remaining ?? 'Unknown')
+const batteryTimeRemaining = computed(() => {
+  const powerRPi5_W = 15
+  const powerRadCAM_W = 5
+  const powerPerLumen_W = 15
+  const lumenCount = 2
+  const batteryCapacity_Wh = 266
+
+  const totalPower_W = powerRPi5_W + powerRadCAM_W + (powerPerLumen_W * lumenCount)
+  const remainingCapacity_Wh = batteryCapacity_Wh * (batteryLevel.value / 100)
+  const hoursRemaining = totalPower_W > 0 ? remainingCapacity_Wh / totalPower_W : 0
+  const h = Math.floor(hoursRemaining)
+  const m = Math.round((hoursRemaining - h) * 60)
+  return `${h}h ${m}m`
+})
 
 const gpsStatus = computed<'active' | 'searching' | 'inactive'>(() => {
   if (!location.value) return 'inactive'
