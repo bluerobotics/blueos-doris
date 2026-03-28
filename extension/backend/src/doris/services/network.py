@@ -10,8 +10,6 @@ from .blueos.network import NetworkClient
 
 logger = logging.getLogger(__name__)
 
-DORIS_SERIAL_NUMBER = "D-BB-00"
-
 
 class NetworkService:
     """Service for managing network connections via BlueOS WiFi Manager.
@@ -24,18 +22,20 @@ class NetworkService:
         self._client = NetworkClient(blueos_services.wifi_manager)
         self._linux2rest = BlueOSClient(blueos_services.linux2rest)
         self._cached_mac: str | None = None
+        self._cached_serial: str | None = None
 
     async def get_network_info(self) -> NetworkInfo:
         """Get current network information including device identity."""
         connection = await self.get_connection_status()
         networks = await self.scan_networks()
         hotspot_ssid = await self._get_hotspot_ssid()
+        serial = await self._get_serial_number()
 
         return NetworkInfo(
             connection=connection,
             available_networks=networks,
             is_scanning=False,
-            serial_number=DORIS_SERIAL_NUMBER,
+            serial_number=serial,
             hotspot_ssid=hotspot_ssid,
         )
 
@@ -47,6 +47,28 @@ class NetworkService:
         except Exception as e:
             logger.warning(f"Failed to get hotspot credentials: {e}")
             return None
+
+    async def _get_serial_number(self) -> str:
+        """Derive DORIS serial number from the last 4 hex digits of the ethernet MAC."""
+        if self._cached_serial:
+            return self._cached_serial
+
+        try:
+            interfaces: list[dict[str, Any]] = await self._linux2rest.get(  # type: ignore[assignment]
+                "/system/network"
+            )
+            for iface in interfaces:
+                name = iface.get("name", "")
+                if name.startswith("eth") or name.startswith("en"):
+                    mac = iface.get("mac", "")
+                    if mac:
+                        suffix = mac.replace(":", "")[-4:].upper()
+                        self._cached_serial = f"D-{suffix}"
+                        return self._cached_serial
+        except Exception as e:
+            logger.warning("Failed to get ethernet MAC for serial number: %s", e)
+
+        return "D-0000"
 
     async def _get_wlan_mac(self) -> str | None:
         """Get MAC address of the wlan0 interface from linux2rest."""
@@ -192,6 +214,10 @@ class NetworkService:
         falls back to hotspot-only. Sets hotspot credentials on the
         secondary interface.
         """
+        if ssid == "DORIS":
+            serial = await self._get_serial_number()
+            ssid = f"DORIS ({serial})"
+
         interfaces_data = await self._client.list_interfaces()
         if not interfaces_data:
             logger.warning("No WiFi interfaces found (v2 API unavailable)")
