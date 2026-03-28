@@ -52,6 +52,8 @@ local PARAM_TABLE_KEY = 73
 assert(param:add_table(PARAM_TABLE_KEY, "DORIS_", 1), "DIVE: could not add DORIS_ param table")
 assert(param:add_param(PARAM_TABLE_KEY, 1, "START", 0), "DIVE: could not add DORIS_START param")
 local DORIS_START = Parameter("DORIS_START")
+-- Always reset on script load so a persisted value of 1 doesn't trigger a dive on reboot
+DORIS_START:set_and_save(0)
 
 -- runtime variables
 local state             = STATE_WAIT_START
