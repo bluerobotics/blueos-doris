@@ -58,6 +58,32 @@ def deploy_lua_scripts(logger: logging.Logger) -> None:
         logger.warning("Failed to deploy doris.lua: %s", e)
 
 
+ARTEMIS_SVL_DEST = Path("/usr/bin/artemis_svl.py")
+
+
+def deploy_artemis_svl(logger: logging.Logger) -> None:
+    """Copy artemis_svl.py to /usr/bin if permissions allow."""
+    src: Path | None = None
+    for candidate in SCRIPT_SEARCH_PATHS:
+        path = candidate / "artemis_svl.py"
+        if path.is_file():
+            src = path
+            break
+
+    if src is None:
+        logger.warning("artemis_svl.py not found in any search path: %s", SCRIPT_SEARCH_PATHS)
+        return
+
+    try:
+        shutil.copy2(src, ARTEMIS_SVL_DEST)
+        ARTEMIS_SVL_DEST.chmod(0o755)
+        logger.info("Deployed %s -> %s", src, ARTEMIS_SVL_DEST)
+    except PermissionError:
+        logger.warning("Insufficient permissions to copy artemis_svl.py to %s", ARTEMIS_SVL_DEST)
+    except Exception as e:
+        logger.warning("Failed to deploy artemis_svl.py: %s", e)
+
+
 def create_app() -> Robyn:
     """Create and configure the Robyn application."""
 
@@ -102,6 +128,7 @@ def create_app() -> Robyn:
     @app.startup_handler
     async def on_startup():
         deploy_lua_scripts(logger)
+        deploy_artemis_svl(logger)
 
         network_service = NetworkService()
         try:
