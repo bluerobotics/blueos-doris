@@ -1,5 +1,6 @@
 """API routes for DORIS backend."""
 
+from .artemis import register_artemis_routes
 from .attitude import register_attitude_routes
 from .blueos import register_blueos_routes
 from .configurations import register_configuration_routes
@@ -11,6 +12,7 @@ from .sensors import register_sensor_routes
 from .system import register_system_routes
 
 __all__ = [
+    "register_artemis_routes",
     "register_attitude_routes",
     "register_blueos_routes",
     "register_system_routes",

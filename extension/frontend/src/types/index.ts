@@ -1,4 +1,4 @@
-export type Screen = 'home' | 'dives' | 'alldives' | 'sensors' | 'media' | 'network' | 'notifications' | 'help' | 'location' | 'viewmedia'
+export type Screen = 'home' | 'dives' | 'alldives' | 'sensors' | 'media' | 'network' | 'notifications' | 'help' | 'location' | 'viewmedia' | 'artemis'
 
 export interface Module {
   id: number

@@ -864,6 +864,189 @@ export function useDiveControl() {
   }
 }
 
+// ── Artemis composables ─────────────────────────────────────────────
+
+export interface SerialPortInfo {
+  device: string
+  description: string
+  hwid: string
+}
+
+export interface FirmwareUploadResult {
+  path: string
+  size_bytes: number
+}
+
+export function useArtemis() {
+  const ports = ref<SerialPortInfo[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  async function fetchPorts() {
+    loading.value = true
+    error.value = null
+    try {
+      ports.value = await fetchApi<SerialPortInfo[]>('/artemis/ports')
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch serial ports'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function uploadFirmware(file: File): Promise<FirmwareUploadResult | null> {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await fetch(
+        `${API_BASE}/artemis/firmware/upload?filename=${encodeURIComponent(file.name)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: file,
+        },
+      )
+      if (!response.ok) {
+        let detail = `${response.status} ${response.statusText}`
+        try {
+          const body = await response.json()
+          if (body?.error) detail = body.error
+        } catch { /* no JSON body */ }
+        throw new Error(`Firmware upload failed: ${detail}`)
+      }
+      return await response.json() as FirmwareUploadResult
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to upload firmware'
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return {
+    ports: readonly(ports),
+    loading: readonly(loading),
+    error: readonly(error),
+    fetchPorts,
+    uploadFirmware,
+  }
+}
+
+export interface FlashStatusResponse {
+  session_id: string
+  lines: string[]
+  total_lines: number
+  done: boolean
+  success: boolean
+  error: string | null
+}
+
+export interface ArtemisFlashResult {
+  success: boolean
+  message: string
+}
+
+export function useArtemisFlash() {
+  const flashing = ref(false)
+  const progress = ref<string[]>([])
+  const result = ref<ArtemisFlashResult | null>(null)
+  const error = ref<string | null>(null)
+
+  let pollTimer: number | undefined
+  let lineIndex = 0
+
+  async function startFlash(params: {
+    port: string
+    firmware_path: string
+    baud?: number
+    timeout?: number
+  }) {
+    progress.value = []
+    result.value = null
+    error.value = null
+    flashing.value = true
+    lineIndex = 0
+
+    try {
+      const response = await fetch(`${API_BASE}/artemis/flash`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          port: params.port,
+          firmware_path: params.firmware_path,
+          baud: params.baud ?? 115200,
+          timeout: params.timeout ?? 0.5,
+        }),
+      })
+      if (!response.ok) {
+        let detail = `${response.status} ${response.statusText}`
+        try {
+          const body = await response.json()
+          if (body?.error) detail = body.error
+        } catch { /* no JSON body */ }
+        throw new Error(`Failed to start flash: ${detail}`)
+      }
+      const { session_id } = await response.json() as { session_id: string }
+      pollProgress(session_id)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to start flash'
+      flashing.value = false
+    }
+  }
+
+  function pollProgress(sessionId: string) {
+    pollTimer = window.setInterval(async () => {
+      try {
+        const status = await fetchApi<FlashStatusResponse>(
+          `/artemis/flash/status?session_id=${sessionId}&from_line=${lineIndex}`
+        )
+        if (status.lines.length > 0) {
+          progress.value = [...progress.value, ...status.lines]
+          lineIndex = status.total_lines
+        }
+        if (status.done) {
+          stopPolling()
+          flashing.value = false
+          result.value = {
+            success: status.success,
+            message: status.success ? 'Upload Successful' : (status.error || 'Upload Failed'),
+          }
+        }
+      } catch (e) {
+        stopPolling()
+        error.value = e instanceof Error ? e.message : 'Failed to poll flash status'
+        flashing.value = false
+      }
+    }, 500)
+  }
+
+  function stopPolling() {
+    if (pollTimer !== undefined) {
+      clearInterval(pollTimer)
+      pollTimer = undefined
+    }
+  }
+
+  function reset() {
+    stopPolling()
+    flashing.value = false
+    progress.value = []
+    result.value = null
+    error.value = null
+    lineIndex = 0
+  }
+
+  return {
+    flashing: readonly(flashing),
+    progress: readonly(progress),
+    result: readonly(result),
+    error: readonly(error),
+    startFlash,
+    reset,
+    stopPolling,
+  }
+}
+
 // ── Health check ────────────────────────────────────────────────────
 
 export async function checkHealth(): Promise<boolean> {

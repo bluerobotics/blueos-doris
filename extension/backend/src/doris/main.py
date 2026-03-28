@@ -9,6 +9,7 @@ from robyn.openapi import Contact, OpenAPI, OpenAPIInfo
 from .config import settings
 from .services.network import NetworkService
 from .routes import (
+    register_artemis_routes,
     register_attitude_routes,
     register_blueos_routes,
     register_configuration_routes,
@@ -59,6 +60,7 @@ def create_app() -> Robyn:
 
     # Register WebSocket routes
     register_attitude_routes(app)
+    register_artemis_routes(app)
 
     # Configure secondary WiFi interface as hotspot on startup
     logger = logging.getLogger(__name__)

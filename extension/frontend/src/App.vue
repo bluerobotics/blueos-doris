@@ -14,6 +14,7 @@ import Notifications from './components/Notifications.vue'
 import Location from './components/Location.vue'
 import AllMissions from './components/AllMissions.vue'
 import ViewMediaScreen from './components/ViewMediaScreen.vue'
+import ArtemisFlash from './components/ArtemisFlash.vue'
 
 const currentScreen = ref<Screen>('home')
 const previousScreen = ref<Screen>('media')
@@ -119,6 +120,7 @@ const setConnected = (connected: boolean) => {
         @navigate="handleSetCurrentScreen"
       />
       <HelpTutorials v-else-if="currentScreen === 'help'" />
+      <ArtemisFlash v-else-if="currentScreen === 'artemis'" />
       <Location v-else-if="currentScreen === 'location'" />
       <ViewMediaScreen
         v-else-if="currentScreen === 'viewmedia'"

@@ -1,5 +1,6 @@
 """Pydantic models for DORIS API."""
 
+from .artemis import SerialPortInfo
 from .media import MediaFile, MediaMission
 from .missions import Mission, MissionConfig, TriggerConfig
 from .network import ConnectionStatus, NetworkInfo, WifiNetwork
@@ -20,5 +21,6 @@ __all__ = [
     "TriggerConfig",
     "MediaFile",
     "MediaMission",
+    "SerialPortInfo",
 ]
 

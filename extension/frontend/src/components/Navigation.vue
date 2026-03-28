@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Home, Wifi, Compass, Gauge, Database, Bell, HelpCircle, List, Menu, X } from 'lucide-vue-next'
+import { Home, Wifi, Compass, Gauge, Database, Bell, HelpCircle, List, Menu, X, Cpu } from 'lucide-vue-next'
 import type { Screen } from '../types'
 
 interface Props {
@@ -25,6 +25,7 @@ const navItems = computed(() => [
   { id: 'sensors' as Screen, icon: Gauge, label: 'Sensors', enabled: true },
   { id: 'media' as Screen, icon: Database, label: 'Data', enabled: true },
   { id: 'network' as Screen, icon: Wifi, label: 'Network', enabled: true },
+  { id: 'artemis' as Screen, icon: Cpu, label: 'Artemis', enabled: true },
   { id: 'notifications' as Screen, icon: Bell, label: 'Notifications', badge: props.notificationCount, enabled: true },
   { id: 'help' as Screen, icon: HelpCircle, label: 'Help', enabled: true },
 ])
