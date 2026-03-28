@@ -40,12 +40,19 @@ class NetworkService:
         )
 
     async def _get_hotspot_ssid(self) -> str | None:
-        """Get the hotspot SSID from the WiFi Manager hotspot credentials."""
+        """Get the hotspot SSID for the wlan1 interface."""
+        try:
+            status = await self._client._v2.wifi_hotspot_status("wlan1")
+            ssid = status.get("ssid")
+            if ssid:
+                return ssid
+        except Exception:
+            pass
         try:
             creds = await self._client.get_hotspot_credentials()
             return creds.get("ssid")
         except Exception as e:
-            logger.warning(f"Failed to get hotspot credentials: {e}")
+            logger.warning("Failed to get hotspot credentials: %s", e)
             return None
 
     async def _get_serial_number(self) -> str:
