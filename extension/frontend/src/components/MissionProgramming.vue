@@ -202,9 +202,9 @@ const releaseWeightWarning = computed(() => {
     : releaseWeightElapsedUnit.value === 'minutes'
     ? Number(releaseWeightElapsedNumber.value)
     : Number(releaseWeightElapsedNumber.value) / 60
-  if (totalMinutes < 20) return { show: true, title: 'Release Time Too Short', message: 'Release time should be at least 20 minutes to ensure proper dive duration.' }
-  if (totalMinutes > 1200) return { show: true, title: 'Release Time Too Long', message: 'Release time exceeds 20 hours. Consider if this extended duration is necessary for mission objectives.' }
-  return { show: false, title: '', message: '' }
+  if (totalMinutes < 20) return { show: true, severity: 'warning' as const, title: 'Release Time May Be Short', message: 'Release time is under 20 minutes. This may not allow enough dive duration, but will be used as configured.' }
+  if (totalMinutes > 1200) return { show: true, severity: 'error' as const, title: 'Release Time Too Long', message: 'Release time exceeds 20 hours. Consider if this extended duration is necessary for mission objectives.' }
+  return { show: false, severity: 'warning' as const, title: '', message: '' }
 })
 
 function isDelayTooLong(number: string, unit: string): boolean {
@@ -1364,9 +1364,9 @@ const phaseStyle = "background-color: rgba(14, 36, 70, 0.3); border: 1px solid r
                     <option value="seconds">seconds</option><option value="minutes">minutes</option><option value="hours">hours</option>
                   </select>
                 </div>
-                <div v-if="releaseWeightWarning.show" class="mt-3 rounded-lg p-4" style="background-color: #0E2446; border: 2px solid #DD2C1D">
+                <div v-if="releaseWeightWarning.show" class="mt-3 rounded-lg p-4" :style="releaseWeightWarning.severity === 'warning' ? 'background-color: rgba(255, 184, 0, 0.1); border: 1px solid rgba(255, 184, 0, 0.5)' : 'background-color: #0E2446; border: 2px solid #DD2C1D'">
                   <div class="flex items-start gap-3">
-                    <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: #DD2C1D" />
+                    <AlertTriangle class="w-5 h-5 flex-shrink-0 mt-0.5" :style="releaseWeightWarning.severity === 'warning' ? 'color: #FFB800' : 'color: #DD2C1D'" />
                     <div class="flex-1">
                       <h3 class="text-white font-semibold mb-1">{{ releaseWeightWarning.title }}</h3>
                       <p class="text-white text-sm opacity-90">{{ releaseWeightWarning.message }}</p>
