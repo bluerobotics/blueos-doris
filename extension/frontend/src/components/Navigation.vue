@@ -9,7 +9,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  notificationCount: 3
+  notificationCount: 0
 })
 
 const emit = defineEmits<{

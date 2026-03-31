@@ -1,101 +1,77 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { Bell, CheckCircle, AlertTriangle, Info, X } from 'lucide-vue-next'
-import type { Screen, Notification } from '../types'
+import { computed, onMounted, onUnmounted } from 'vue'
+import { Bell, CheckCircle, AlertTriangle, AlertCircle, Info, X } from 'lucide-vue-next'
+import type { Screen } from '../types'
+import { useNotifications } from '../composables/useApi'
+import type { NotificationItemApi, NotificationSettingsApi } from '../composables/useApi'
 
 const emit = defineEmits<{
   navigate: [screen: Screen]
 }>()
 
-const notifications = ref<Notification[]>([
-  {
-    id: 1,
-    type: 'info',
-    title: 'Device Surfaced',
-    message: 'DORIS has surfaced at 41.7128° N, 74.0060° W. GPS signal acquired. Iridium satellite connection established.',
-    timestamp: '1 minute ago',
-    read: false,
-    linkTo: 'location'
-  },
-  {
-    id: 2,
-    type: 'warning',
-    title: 'Low Battery Warning',
-    message: 'Light Module 1 battery has dropped to 45%. Consider recharging soon.',
-    timestamp: '5 minutes ago',
-    read: false
-  },
-  {
-    id: 3,
-    type: 'success',
-    title: 'Mission Completed',
-    message: 'Mission "Deep Sea Survey 2024-01" completed successfully. 487 images captured.',
-    timestamp: '2 hours ago',
-    read: false
-  },
-  {
-    id: 4,
-    type: 'info',
-    title: 'Network Connected',
-    message: 'Successfully connected to DORIS_HotSpot network.',
-    timestamp: '3 hours ago',
-    read: true
-  },
-  {
-    id: 5,
-    type: 'success',
-    title: 'Sensor Calibration Complete',
-    message: 'CTD Sensor calibration completed successfully.',
-    timestamp: '1 day ago',
-    read: true
-  },
-  {
-    id: 6,
-    type: 'info',
-    title: 'System Update Available',
-    message: 'A new software update is available for DORIS. Update to version 2.1.0.',
-    timestamp: '2 days ago',
-    read: true
-  }
-])
+const {
+  notifications,
+  unreadCount,
+  settings,
+  fetchNotifications,
+  fetchSettings,
+  markAsRead,
+  markAllRead,
+  deleteNotification,
+  updateSettings,
+} = useNotifications()
 
-const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
+let pollId: number | undefined
 
-const markAsRead = (id: number) => {
-  notifications.value = notifications.value.map(n =>
-    n.id === id ? { ...n, read: true } : n
-  )
-}
+onMounted(async () => {
+  await Promise.all([fetchNotifications(), fetchSettings()])
+  pollId = setInterval(fetchNotifications, 10000) as unknown as number
+})
 
-const deleteNotification = (id: number) => {
-  notifications.value = notifications.value.filter(n => n.id !== id)
-}
+onUnmounted(() => {
+  if (pollId) clearInterval(pollId)
+})
 
-const markAllAsRead = () => {
-  notifications.value = notifications.value.map(n => ({ ...n, read: true }))
+const localSettings = computed(() => settings.value ?? {
+  mission_alerts: true,
+  system_warnings: true,
+  network_status: true,
+  software_updates: false,
+})
+
+async function toggleSetting(key: keyof NotificationSettingsApi) {
+  const updated = { ...localSettings.value, [key]: !localSettings.value[key] }
+  await updateSettings(updated)
 }
 
 const getIcon = (type: string) => {
   switch (type) {
     case 'success': return { component: CheckCircle, color: '#FCD869' }
     case 'warning': return { component: AlertTriangle, color: '#FF9937' }
+    case 'error': return { component: AlertCircle, color: '#DD2C1D' }
     case 'info': return { component: Info, color: '#41B9C3' }
     default: return { component: Bell, color: '#96EEF2' }
   }
 }
 
-const handleNotificationClick = (notification: Notification) => {
-  if (notification.linkTo) {
-    emit('navigate', notification.linkTo)
-  }
+function formatTimestamp(ts: string): string {
+  const date = new Date(ts)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? '' : 's'} ago`
+  const diffDay = Math.floor(diffHr / 24)
+  return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`
 }
 
-const notificationSettings = ref({
-  missionAlerts: true,
-  systemWarnings: true,
-  networkStatus: true,
-  softwareUpdates: false
-})
+function handleNotificationClick(notification: NotificationItemApi) {
+  if (notification.link_to) {
+    emit('navigate', notification.link_to as Screen)
+  }
+}
 </script>
 
 <template>
@@ -118,7 +94,7 @@ const notificationSettings = ref({
         </div>
         <button
           v-if="unreadCount > 0"
-          @click="markAllAsRead"
+          @click="markAllRead()"
           class="px-4 py-2 rounded-lg transition-all text-sm"
           style="background-color: rgba(65, 185, 195, 0.2); color: #96EEF2; border: 1px solid rgba(65, 185, 195, 0.3)"
         >
@@ -126,7 +102,6 @@ const notificationSettings = ref({
         </button>
       </div>
 
-      <!-- Notifications List -->
       <div class="space-y-3">
         <div
           v-if="notifications.length === 0"
@@ -144,7 +119,7 @@ const notificationSettings = ref({
           :key="notification.id"
           @click="handleNotificationClick(notification)"
           class="rounded-lg p-4 transition-all"
-          :class="notification.linkTo ? 'cursor-pointer hover:border-opacity-100' : ''"
+          :class="notification.link_to ? 'cursor-pointer hover:border-opacity-100' : ''"
           :style="{
             backgroundColor: notification.read
               ? 'rgba(14, 36, 70, 0.3)'
@@ -178,7 +153,7 @@ const notificationSettings = ref({
               </p>
               <div class="flex items-center justify-between">
                 <span class="text-xs" style="color: #96EEF2; opacity: 0.6">
-                  {{ notification.timestamp }}
+                  {{ formatTimestamp(notification.timestamp) }}
                 </span>
                 <button
                   v-if="!notification.read"
@@ -213,7 +188,7 @@ const notificationSettings = ref({
             </p>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" v-model="notificationSettings.missionAlerts" />
+            <input type="checkbox" :checked="localSettings.mission_alerts" @change="toggleSetting('mission_alerts')" />
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -229,7 +204,7 @@ const notificationSettings = ref({
             </p>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" v-model="notificationSettings.systemWarnings" />
+            <input type="checkbox" :checked="localSettings.system_warnings" @change="toggleSetting('system_warnings')" />
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -245,7 +220,7 @@ const notificationSettings = ref({
             </p>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" v-model="notificationSettings.networkStatus" />
+            <input type="checkbox" :checked="localSettings.network_status" @change="toggleSetting('network_status')" />
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -261,7 +236,7 @@ const notificationSettings = ref({
             </p>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" v-model="notificationSettings.softwareUpdates" />
+            <input type="checkbox" :checked="localSettings.software_updates" @change="toggleSetting('software_updates')" />
             <span class="toggle-slider"></span>
           </label>
         </div>

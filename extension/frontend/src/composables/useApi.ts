@@ -1048,6 +1048,131 @@ export function useArtemisFlash() {
   }
 }
 
+// ── Notification types ──────────────────────────────────────────────
+
+export interface NotificationItemApi {
+  id: string
+  type: 'info' | 'warning' | 'success' | 'error'
+  category: 'mission' | 'system' | 'network' | 'software'
+  title: string
+  message: string
+  timestamp: string
+  read: boolean
+  link_to: string | null
+}
+
+export interface NotificationSettingsApi {
+  mission_alerts: boolean
+  system_warnings: boolean
+  network_status: boolean
+  software_updates: boolean
+}
+
+// ── Notification composables ────────────────────────────────────────
+
+export function useNotifications() {
+  const notifications = ref<NotificationItemApi[]>([])
+  const unreadCount = ref(0)
+  const settings = ref<NotificationSettingsApi | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  async function fetchNotifications() {
+    loading.value = true
+    error.value = null
+    try {
+      notifications.value = await fetchApi<NotificationItemApi[]>('/notifications')
+      unreadCount.value = notifications.value.filter(n => !n.read).length
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch notifications'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchUnreadCount() {
+    try {
+      const result = await fetchApi<{ count: number }>('/notifications/unread-count')
+      unreadCount.value = result.count
+    } catch {
+      // silently ignore badge poll failures
+    }
+  }
+
+  async function markAsRead(id: string): Promise<boolean> {
+    try {
+      await postApi<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}/read`)
+      notifications.value = notifications.value.map(n =>
+        n.id === id ? { ...n, read: true } : n
+      )
+      unreadCount.value = notifications.value.filter(n => !n.read).length
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function markAllRead(): Promise<boolean> {
+    try {
+      await postApi<{ success: boolean }>('/notifications/read-all')
+      notifications.value = notifications.value.map(n => ({ ...n, read: true }))
+      unreadCount.value = 0
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function deleteNotification(id: string): Promise<boolean> {
+    try {
+      await deleteApi<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}`)
+      notifications.value = notifications.value.filter(n => n.id !== id)
+      unreadCount.value = notifications.value.filter(n => !n.read).length
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function fetchSettings() {
+    try {
+      settings.value = await fetchApi<NotificationSettingsApi>('/notifications/settings')
+    } catch {
+      // use defaults
+    }
+  }
+
+  async function updateSettings(newSettings: NotificationSettingsApi): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/notifications/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSettings),
+      })
+      if (!response.ok) return false
+      settings.value = await response.json()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  return {
+    notifications: readonly(notifications),
+    unreadCount: readonly(unreadCount),
+    settings: readonly(settings),
+    loading: readonly(loading),
+    error: readonly(error),
+    fetchNotifications,
+    fetchUnreadCount,
+    markAsRead,
+    markAllRead,
+    deleteNotification,
+    fetchSettings,
+    updateSettings,
+  }
+}
+
 // ── Health check ────────────────────────────────────────────────────
 
 export async function checkHealth(): Promise<boolean> {

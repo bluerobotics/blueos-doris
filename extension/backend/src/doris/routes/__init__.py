@@ -8,6 +8,7 @@ from .dive import register_dive_routes
 from .media import register_media_routes
 from .missions import register_mission_routes
 from .network import register_network_routes
+from .notifications import register_notification_routes
 from .sensors import register_sensor_routes
 from .system import register_system_routes
 
@@ -22,5 +23,6 @@ __all__ = [
     "register_media_routes",
     "register_configuration_routes",
     "register_dive_routes",
+    "register_notification_routes",
 ]
 

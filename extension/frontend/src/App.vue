@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { Screen, DiveData } from './types'
-import { useDiveControl } from './composables/useApi'
+import { useDiveControl, useNotifications } from './composables/useApi'
 import Navigation from './components/Navigation.vue'
 import Footer from './components/Footer.vue'
 import HomeScreen from './components/HomeScreen.vue'
@@ -24,13 +24,19 @@ const targetSensor = ref<string | null>(null)
 const { status: diveStatus, fetchDiveStatus } = useDiveControl()
 const isDiveActive = computed(() => diveStatus.value?.active === true)
 
+const { unreadCount: notificationCount, fetchUnreadCount } = useNotifications()
+
 let divePolling: number | undefined
+let notifPolling: number | undefined
 onMounted(() => {
   fetchDiveStatus()
+  fetchUnreadCount()
   divePolling = setInterval(fetchDiveStatus, 5000) as unknown as number
+  notifPolling = setInterval(fetchUnreadCount, 15000) as unknown as number
 })
 onUnmounted(() => {
   if (divePolling) clearInterval(divePolling)
+  if (notifPolling) clearInterval(notifPolling)
 })
 const selectedDiveData = ref<DiveData | null>(null)
 const releaseWeightBy = ref<'datetime' | 'elapsed'>('elapsed')
@@ -79,6 +85,7 @@ const setConnected = (connected: boolean) => {
 
     <Navigation
       :current-screen="currentScreen"
+      :notification-count="notificationCount"
       @navigate="handleNavigate"
     />
 
