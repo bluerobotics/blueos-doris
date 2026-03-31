@@ -285,7 +285,7 @@ const handleConfigurationChange = async () => {
 }
 
 async function handleStartDive() {
-  await startDive()
+  await startDive(selectedConfiguration.value || undefined)
 }
 
 const formatReleaseTime = (date: Date) => {

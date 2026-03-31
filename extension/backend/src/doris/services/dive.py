@@ -3,26 +3,41 @@
 Sets the DORIS_START MAVLink parameter via mavlink2rest to trigger
 the onboard Lua dive script.
 
-Uses the mavlink2rest helper endpoint to get a PARAM_SET template,
-fills in the parameter name and value, and POSTs it. For reading,
-sends a PARAM_REQUEST_READ then reads the cached PARAM_VALUE message.
+Before triggering, the service can load a DeploymentConfiguration from
+disk and push the relevant settings as DORIS_* parameters so the Lua
+state machine uses the correct durations and light settings.
 """
 
 import asyncio
-import json
 import logging
 
 import httpx
 
 from ..config import blueos_services
+from ..models.configuration import DeploymentConfiguration, TimeValue
 
 logger = logging.getLogger(__name__)
 
 PARAM_NAME = "DORIS_START"
 
+DEFAULT_DESCENT_RATE_MPS = 0.5
+
 
 def _mavlink2rest_url() -> str:
     return blueos_services.mavlink2rest
+
+
+def _time_value_to_seconds(tv: TimeValue) -> float:
+    """Convert a TimeValue (number + unit) to total seconds."""
+    try:
+        val = float(tv.number) if tv.number else 0.0
+    except ValueError:
+        return 0.0
+    if tv.unit == "minutes":
+        return val * 60.0
+    if tv.unit == "hours":
+        return val * 3600.0
+    return val
 
 
 class DiveService:
@@ -36,8 +51,48 @@ class DiveService:
             self._client = httpx.AsyncClient(timeout=10.0, follow_redirects=True)
         return self._client
 
-    async def start_dive(self) -> bool:
-        """Set DORIS_START=1 via PARAM_SET to trigger the Lua script."""
+    async def push_configuration_params(self, config: DeploymentConfiguration) -> bool:
+        """Translate a DeploymentConfiguration into DORIS_* ArduPilot parameters."""
+        depth_str = config.estimated_depth.strip() if config.estimated_depth else ""
+        try:
+            depth_m = float(depth_str) if depth_str else 0.0
+        except ValueError:
+            depth_m = 0.0
+        descent_dur_s = max(depth_m / DEFAULT_DESCENT_RATE_MPS, 30.0) if depth_m > 0 else 30.0
+
+        release_seconds = _time_value_to_seconds(config.ascent.release_weight.elapsed)
+        release_seconds = max(release_seconds, descent_dur_s + 5)
+
+        params: list[tuple[str, float]] = [
+            ("DORIS_DSC_DUR", round(descent_dur_s)),
+            ("DORIS_RLS_SEC", round(release_seconds)),
+            ("DORIS_DSC_LGT", 1.0 if config.descent.light.enabled else 0.0),
+            ("DORIS_BTM_LGT", 1.0 if config.bottom.light.enabled else 0.0),
+            ("DORIS_ASC_LGT", 1.0 if config.ascent.light.enabled else 0.0),
+            ("DORIS_LGT_BRT", float(config.bottom.light.brightness)),
+        ]
+
+        all_ok = True
+        for name, value in params:
+            ok = await self._set_param(name, value)
+            if not ok:
+                all_ok = False
+            await asyncio.sleep(0.05)
+
+        logger.info(
+            "Pushed config params: %s",
+            ", ".join(f"{n}={v}" for n, v in params),
+        )
+        return all_ok
+
+    async def start_dive(self, config: DeploymentConfiguration | None = None) -> bool:
+        """Push configuration (if given), then set DORIS_START=1."""
+        if config is not None:
+            params_ok = await self.push_configuration_params(config)
+            if not params_ok:
+                logger.warning("Some config params failed to set, proceeding anyway")
+            await asyncio.sleep(0.2)
+
         ok = await self._set_param(PARAM_NAME, 1.0)
         if ok:
             self._last_known_value = 1.0

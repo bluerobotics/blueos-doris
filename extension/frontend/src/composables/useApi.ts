@@ -816,11 +816,12 @@ export function useDiveControl() {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  async function startDive(): Promise<boolean> {
+  async function startDive(configurationName?: string): Promise<boolean> {
     loading.value = true
     error.value = null
     try {
-      const result = await postApi<{ success: boolean; message: string }>('/dive/start')
+      const body = configurationName ? { configuration: configurationName } : undefined
+      const result = await postApi<{ success: boolean; message: string }>('/dive/start', body)
       if (result.success) await fetchDiveStatus()
       return result.success
     } catch (e) {
