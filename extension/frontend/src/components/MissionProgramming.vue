@@ -939,64 +939,64 @@ const phaseStyle = "background-color: rgba(14, 36, 70, 0.3); border: 1px solid r
               <span class="font-medium">Camera Settings</span>
             </button>
 
-            <div v-if="descentAdvancedOpen" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+            <div v-if="descentAdvancedOpen" class="p-4 rounded-lg space-y-4 opacity-50 pointer-events-none" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
               <template v-if="descentCameraType !== 'timelapse'">
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">Resolution</label>
-                  <select v-model="descentResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="descentResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value="4K">4K</option><option value="2.7K">2.7K</option><option value="1080p">1080p</option><option value="720p">720p</option>
                   </select>
                 </div>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">Frame Rate</label>
-                  <select v-model.number="descentFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model.number="descentFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option :value="24">24 fps</option><option :value="30">30 fps</option><option :value="60">60 fps</option>
                   </select>
                 </div>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
-                  <select v-model="descentVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="descentVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value=".MP4">.MP4</option><option value=".MOV">.MOV</option><option value=".AVI">.AVI</option>
                   </select>
                 </div>
               </template>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">Focus</label>
-                <select v-model="descentFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="descentFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="auto">Auto</option><option value="manual">Manual</option>
                 </select>
               </div>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">ISO</label>
-                <select v-model="descentISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="descentISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="auto">Auto</option><option value="100">100</option><option value="200">200</option><option value="400">400</option><option value="800">800</option><option value="1600">1600</option><option value="3200">3200</option>
                 </select>
               </div>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">White Balance</label>
-                <select v-model="descentWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="descentWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="auto">Auto</option><option value="underwater">Underwater</option><option value="3000k">3000K</option><option value="5500k">5500K</option><option value="6500k">6500K</option>
                 </select>
               </div>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">Exposure Compensation</label>
-                <select v-model="descentExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="descentExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="-2">-2.0</option><option value="-1">-1.0</option><option value="0">0.0</option><option value="+1">+1.0</option><option value="+2">+2.0</option>
                 </select>
               </div>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">Sharpness</label>
-                <select v-model="descentSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="descentSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
                 </select>
               </div>
               <div v-if="descentCameraType === 'timelapse'">
                 <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
-                <select v-model="descentFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="descentFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="JPEG">JPEG</option><option value="TIFF">TIFF</option>
                 </select>
               </div>
-              <button @click="resetDescentCameraDefaults" class="px-4 py-2 text-white rounded-lg transition-all hover:opacity-90" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">
+              <button disabled class="px-4 py-2 text-white rounded-lg cursor-not-allowed" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">
                 Reset to Default Settings
               </button>
             </div>
@@ -1188,64 +1188,64 @@ const phaseStyle = "background-color: rgba(14, 36, 70, 0.3); border: 1px solid r
               <span class="font-medium">Camera Settings</span>
             </button>
 
-            <div v-if="bottomAdvancedOpen" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+            <div v-if="bottomAdvancedOpen" class="p-4 rounded-lg space-y-4 opacity-50 pointer-events-none" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
               <template v-if="bottomCameraType !== 'timelapse'">
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">Resolution</label>
-                  <select v-model="bottomResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="bottomResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value="4K">4K</option><option value="2.7K">2.7K</option><option value="1080p">1080p</option><option value="720p">720p</option>
                   </select>
                 </div>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">Frame Rate</label>
-                  <select v-model.number="bottomFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model.number="bottomFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option :value="24">24 fps</option><option :value="30">30 fps</option><option :value="60">60 fps</option>
                   </select>
                 </div>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
-                  <select v-model="bottomVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="bottomVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value=".MP4">.MP4</option><option value=".MOV">.MOV</option><option value=".AVI">.AVI</option>
                   </select>
                 </div>
               </template>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">Focus</label>
-                <select v-model="bottomFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="bottomFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="auto">Auto</option><option value="manual">Manual</option>
                 </select>
               </div>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">ISO</label>
-                <select v-model="bottomISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="bottomISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="auto">Auto</option><option value="100">100</option><option value="200">200</option><option value="400">400</option><option value="800">800</option><option value="1600">1600</option><option value="3200">3200</option>
                 </select>
               </div>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">White Balance</label>
-                <select v-model="bottomWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="bottomWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="auto">Auto</option><option value="underwater">Underwater</option><option value="3000k">3000K</option><option value="5500k">5500K</option><option value="6500k">6500K</option>
                 </select>
               </div>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">Exposure Compensation</label>
-                <select v-model="bottomExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="bottomExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="-2">-2.0</option><option value="-1">-1.0</option><option value="0">0.0</option><option value="+1">+1.0</option><option value="+2">+2.0</option>
                 </select>
               </div>
               <div>
                 <label class="block mb-2 text-sm" style="color: #96EEF2">Sharpness</label>
-                <select v-model="bottomSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="bottomSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
                 </select>
               </div>
               <div v-if="bottomCameraType === 'timelapse'">
                 <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
-                <select v-model="bottomFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                <select disabled v-model="bottomFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                   <option value="JPEG">JPEG</option><option value="TIFF">TIFF</option>
                 </select>
               </div>
-              <button @click="resetBottomCameraDefaults" class="px-4 py-2 text-white rounded-lg transition-all hover:opacity-90" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">Reset to Default Settings</button>
+              <button disabled class="px-4 py-2 text-white rounded-lg cursor-not-allowed" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">Reset to Default Settings</button>
             </div>
           </div>
         </div>
@@ -1493,64 +1493,64 @@ const phaseStyle = "background-color: rgba(14, 36, 70, 0.3); border: 1px solid r
                 <span class="font-medium">Camera Settings</span>
               </button>
 
-              <div v-if="ascentAdvancedOpen" class="p-4 rounded-lg space-y-4" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
+              <div v-if="ascentAdvancedOpen" class="p-4 rounded-lg space-y-4 opacity-50 pointer-events-none" style="background-color: rgba(14, 36, 70, 0.5); border: 1px solid rgba(65, 185, 195, 0.2)">
                 <template v-if="ascentCameraType !== 'timelapse'">
                   <div>
                     <label class="block mb-2 text-sm" style="color: #96EEF2">Resolution</label>
-                    <select v-model="ascentResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <select disabled v-model="ascentResolution" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                       <option value="4K">4K</option><option value="2.7K">2.7K</option><option value="1080p">1080p</option><option value="720p">720p</option>
                     </select>
                   </div>
                   <div>
                     <label class="block mb-2 text-sm" style="color: #96EEF2">Frame Rate</label>
-                    <select v-model.number="ascentFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <select disabled v-model.number="ascentFrameRate" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                       <option :value="24">24 fps</option><option :value="30">30 fps</option><option :value="60">60 fps</option>
                     </select>
                   </div>
                   <div>
                     <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
-                    <select v-model="ascentVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                    <select disabled v-model="ascentVideoFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                       <option value=".MP4">.MP4</option><option value=".MOV">.MOV</option><option value=".AVI">.AVI</option>
                     </select>
                   </div>
                 </template>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">Focus</label>
-                  <select v-model="ascentFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="ascentFocus" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value="auto">Auto</option><option value="manual">Manual</option>
                   </select>
                 </div>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">ISO</label>
-                  <select v-model="ascentISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="ascentISO" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value="auto">Auto</option><option value="100">100</option><option value="200">200</option><option value="400">400</option><option value="800">800</option><option value="1600">1600</option><option value="3200">3200</option>
                   </select>
                 </div>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">White Balance</label>
-                  <select v-model="ascentWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="ascentWhiteBalance" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value="auto">Auto</option><option value="underwater">Underwater</option><option value="3000k">3000K</option><option value="5500k">5500K</option><option value="6500k">6500K</option>
                   </select>
                 </div>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">Exposure Compensation</label>
-                  <select v-model="ascentExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="ascentExposure" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value="-2">-2.0</option><option value="-1">-1.0</option><option value="0">0.0</option><option value="+1">+1.0</option><option value="+2">+2.0</option>
                   </select>
                 </div>
                 <div>
                   <label class="block mb-2 text-sm" style="color: #96EEF2">Sharpness</label>
-                  <select v-model="ascentSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="ascentSharpness" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
                   </select>
                 </div>
                 <div v-if="ascentCameraType === 'timelapse'">
                   <label class="block mb-2 text-sm" style="color: #96EEF2">File Format</label>
-                  <select v-model="ascentFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none" :style="inputStyle">
+                  <select disabled v-model="ascentFileFormat" class="w-full px-4 py-2 text-white rounded-lg focus:outline-none cursor-not-allowed" :style="inputStyle">
                     <option value="JPEG">JPEG</option><option value="TIFF">TIFF</option>
                   </select>
                 </div>
-                <button @click="resetAscentCameraDefaults" class="px-4 py-2 text-white rounded-lg transition-all hover:opacity-90" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">Reset to Default Settings</button>
+                <button disabled class="px-4 py-2 text-white rounded-lg cursor-not-allowed" style="background: linear-gradient(135deg, #41B9C3 0%, #96EEF2 100%)">Reset to Default Settings</button>
               </div>
             </div>
           </div>
