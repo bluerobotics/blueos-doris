@@ -58,7 +58,7 @@ local STATE_DONE       = 6
 
 -- ── DORIS parameter table ──────────────────────────────────────────
 local PARAM_TABLE_KEY  = 73
-local PARAM_TABLE_SIZE = 7
+local PARAM_TABLE_SIZE = 8
 
 assert(param:add_table(PARAM_TABLE_KEY, "DORIS_", PARAM_TABLE_SIZE),
        "DIVE: could not add DORIS_ param table")
@@ -70,6 +70,7 @@ assert(param:add_param(PARAM_TABLE_KEY, 4, "DSC_LGT", 0), "DIVE: could not add D
 assert(param:add_param(PARAM_TABLE_KEY, 5, "BTM_LGT", 0), "DIVE: could not add DORIS_BTM_LGT")
 assert(param:add_param(PARAM_TABLE_KEY, 6, "ASC_LGT", 0), "DIVE: could not add DORIS_ASC_LGT")
 assert(param:add_param(PARAM_TABLE_KEY, 7, "LGT_BRT", 75), "DIVE: could not add DORIS_LGT_BRT")
+assert(param:add_param(PARAM_TABLE_KEY, 8, "STATE",  -1), "DIVE: could not add DORIS_STATE")
 
 local DORIS_START   = Parameter("DORIS_START")
 local DORIS_DSC_DUR = Parameter("DORIS_DSC_DUR")
@@ -78,8 +79,10 @@ local DORIS_DSC_LGT = Parameter("DORIS_DSC_LGT")
 local DORIS_BTM_LGT = Parameter("DORIS_BTM_LGT")
 local DORIS_ASC_LGT = Parameter("DORIS_ASC_LGT")
 local DORIS_LGT_BRT = Parameter("DORIS_LGT_BRT")
+local DORIS_STATE   = Parameter("DORIS_STATE")
 
 DORIS_START:set_and_save(0)
+DORIS_STATE:set(-1)
 param:set_and_save("DISARM_DELAY", 0)
 
 -- ── runtime state ──────────────────────────────────────────────────
@@ -150,6 +153,7 @@ function update()
         script_start_ms = now_ms
     end
     last_update_ms = now_ms
+    DORIS_STATE:set(state)
 
     -- ─── WAIT_START ────────────────────────────────────────────────
     if state == STATE_WAIT_START then
