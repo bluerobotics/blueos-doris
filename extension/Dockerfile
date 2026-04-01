@@ -67,6 +67,7 @@ LABEL permissions='\
       "/root/.config/blueos/ardupilot-manager/firmware:/tmp/storage/firmware",\
       "/usr/blueos/extensions/doris/configurations:/tmp/storage/configurations",\
       "/usr/blueos/extensions/doris/notifications:/tmp/storage/notifications",\
+      "/usr/blueos/extensions/doris/dives:/tmp/storage/dives",\
       "/usr/blueos/userdata/recorder:/tmp/storage/recorder"\
     ],\
     "ExtraHosts": [\
