@@ -80,6 +80,7 @@ local DORIS_ASC_LGT = Parameter("DORIS_ASC_LGT")
 local DORIS_LGT_BRT = Parameter("DORIS_LGT_BRT")
 
 DORIS_START:set_and_save(0)
+param:set_and_save("DISARM_DELAY", 0)
 
 -- ── runtime state ──────────────────────────────────────────────────
 local state           = STATE_WAIT_START
