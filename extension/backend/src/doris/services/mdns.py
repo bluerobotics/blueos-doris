@@ -84,7 +84,14 @@ async def setup_doris_local() -> None:
     """
     avahi_changed = _setup_avahi_hostname()
     if avahi_changed:
-        ok = await _run_host_command("systemctl restart avahi-daemon")
+        # stop/sleep/start instead of restart: BlueOS runs a second mDNS stack
+        # (Beacon's zeroconf) on the same host. An immediate restart causes avahi's
+        # hostname probe to collide with stale multicast state from zeroconf,
+        # resulting in false conflicts (doris-2, doris-3, …). The 3s pause lets
+        # the multicast group clear before avahi re-probes.
+        ok = await _run_host_command(
+            "sudo systemctl stop avahi-daemon && sleep 3 && sudo systemctl start avahi-daemon"
+        )
         if ok:
             logger.info("avahi-daemon restarted")
 
