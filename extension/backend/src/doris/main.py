@@ -21,6 +21,7 @@ from .routes import (
     register_sensor_routes,
     register_system_routes,
 )
+from .services.mdns import setup_doris_local
 from .utils import deploy_artemis_svl, deploy_lua_scripts, restart_firmware
 
 
@@ -80,6 +81,11 @@ def create_app() -> Robyn:
             await network_service.configure_hotspot()
         except Exception as e:
             logger.warning("Hotspot configuration skipped: %s", e)
+
+        try:
+            await setup_doris_local()
+        except Exception as e:
+            logger.warning("doris.local setup skipped: %s", e)
 
     # Serve frontend static files if they exist
     # Check multiple possible locations for frontend dist

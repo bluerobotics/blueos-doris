@@ -68,7 +68,9 @@ LABEL permissions='\
       "/usr/blueos/extensions/doris/configurations:/tmp/storage/configurations",\
       "/usr/blueos/extensions/doris/notifications:/tmp/storage/notifications",\
       "/usr/blueos/extensions/doris/dives:/tmp/storage/dives",\
-      "/usr/blueos/userdata/recorder:/tmp/storage/recorder"\
+      "/usr/blueos/userdata/recorder:/tmp/storage/recorder",\
+      "/usr/blueos/extensions/doris/nginx:/tmp/nginx",\
+      "/etc/avahi:/tmp/avahi"\
     ],\
     "ExtraHosts": [\
       "host.docker.internal:host-gateway"\
@@ -76,7 +78,7 @@ LABEL permissions='\
     "PortBindings": {\
       "8095/tcp": [\
         {\
-          "HostPort": ""\
+          "HostPort": "8095"\
         }\
       ]\
     }\
