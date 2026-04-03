@@ -7,7 +7,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { Wifi, WifiOff } from 'lucide-vue-next'
 import { useAttitudeWs } from '../composables/useAttitudeWs'
 
-const MODEL_PATH = '/models/VECTORED_6DOF.glb'
+const MODEL_PATH = '/models/doris.glb'
 const LERP = 0.15
 
 const { attitude, connected } = useAttitudeWs()
