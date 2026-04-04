@@ -1,9 +1,10 @@
 """DORIS external storage setup.
 
 On startup, checks if /dev/sda exists on the host. If it does:
-  1. Mounts /dev/sda to /mnt
-  2. Moves /usr/blueos/userdata/recorder to /mnt/recorder
-  3. Creates a symlink from the old path to the new location
+  1. Finds the first partition (e.g. /dev/sda1) via lsblk
+  2. Mounts the partition to /mnt
+  3. Copies recorder data to /mnt/recorder using rsync
+  4. Creates a symlink from the old path to the new location
 
 This offloads recording data to an external USB drive.
 All operations run on the host via the Commander API.
@@ -25,7 +26,7 @@ from ..config import blueos_services
 
 logger = logging.getLogger(__name__)
 
-DEVICE = "/dev/sda"
+DISK = "/dev/sda"
 MOUNT_POINT = "/mnt"
 RECORDER_SRC = "/usr/blueos/userdata/recorder"
 RECORDER_DST = "/mnt/recorder"
@@ -82,8 +83,29 @@ async def _run_host_command(command: str, timeout: float = 30.0) -> tuple[bool, 
         return False, str(e)
 
 
+async def _find_partition() -> str | None:
+    """Find the first partition on DISK (e.g. /dev/sda1).
+
+    Falls back to DISK itself if it has a filesystem directly.
+    """
+    ok, out = await _run_host_command(
+        f"lsblk -lnpo NAME,TYPE {DISK} 2>/dev/null | awk '$2==\"part\"{{print $1; exit}}'"
+    )
+    if ok and out:
+        return out.strip()
+
+    # No partition table — check if the disk itself has a filesystem
+    ok, out = await _run_host_command(
+        f"lsblk -lnpo FSTYPE {DISK} 2>/dev/null | head -1"
+    )
+    if ok and out.strip():
+        return DISK
+
+    return None
+
+
 async def _do_setup() -> None:
-    """Mount /dev/sda and relocate the recorder directory to it.
+    """Mount external drive and relocate the recorder directory to it.
 
     Idempotent — skips steps that are already done.
     Updates ``_status`` at each stage so the frontend can report progress.
@@ -92,45 +114,71 @@ async def _do_setup() -> None:
 
     _status = MigrationStatus(MigrationState.CHECKING, "Checking for external storage device")
 
-    ok, _ = await _run_host_command(f"test -b {DEVICE}")
+    ok, _ = await _run_host_command(f"test -b {DISK}")
     if not ok:
-        logger.info("%s not found, skipping external storage setup", DEVICE)
-        _status = MigrationStatus(MigrationState.SKIPPED, f"{DEVICE} not found")
+        logger.info("%s not found, skipping external storage setup", DISK)
+        _status = MigrationStatus(MigrationState.SKIPPED, f"{DISK} not found")
         return
 
-    _status = MigrationStatus(MigrationState.MOUNTING, f"Mounting {DEVICE}")
+    partition = await _find_partition()
+    if not partition:
+        logger.info("No usable partition found on %s", DISK)
+        _status = MigrationStatus(MigrationState.SKIPPED, f"No partition found on {DISK}")
+        return
+
+    logger.info("Using partition %s", partition)
+
+    # ── Mount ────────────────────────────────────────────────────────
+    _status = MigrationStatus(MigrationState.MOUNTING, f"Mounting {partition}")
 
     ok, _ = await _run_host_command(f"mountpoint -q {MOUNT_POINT}")
     if not ok:
-        logger.info("Mounting %s to %s", DEVICE, MOUNT_POINT)
-        ok, err = await _run_host_command(f"sudo mount {DEVICE} {MOUNT_POINT}")
+        logger.info("Mounting %s to %s", partition, MOUNT_POINT)
+        ok, err = await _run_host_command(f"sudo mount {partition} {MOUNT_POINT}")
         if not ok:
-            logger.error("Failed to mount %s: %s", DEVICE, err)
+            logger.error("Failed to mount %s: %s", partition, err)
             _status = MigrationStatus(MigrationState.ERROR, error=f"Mount failed: {err}")
             return
     else:
         logger.info("%s already mounted", MOUNT_POINT)
 
+    # ── Already done? ────────────────────────────────────────────────
     ok, _ = await _run_host_command(f"test -L {RECORDER_SRC}")
     if ok:
         logger.info("%s is already a symlink, nothing to do", RECORDER_SRC)
         _status = MigrationStatus(MigrationState.DONE, "Already migrated")
         return
 
+    # ── Copy data ────────────────────────────────────────────────────
     ok, _ = await _run_host_command(f"test -d {RECORDER_SRC}")
     if ok:
         _status = MigrationStatus(
             MigrationState.MIGRATING,
-            "Moving recorder data to external drive — this may take several minutes",
+            "Copying recorder data to external drive — this may take several minutes",
         )
-        logger.info("Moving %s to %s", RECORDER_SRC, RECORDER_DST)
+        # rsync is preferred over mv:
+        #  - works across filesystems (ext4 → ntfs)
+        #  - doesn't fail on permission/ownership differences
+        #  - handles a pre-existing destination directory correctly
+        logger.info("Syncing %s → %s", RECORDER_SRC, RECORDER_DST)
         ok, err = await _run_host_command(
-            f"sudo mv {RECORDER_SRC} {RECORDER_DST}",
-            timeout=600.0,
+            f"sudo rsync -a --no-perms --no-owner --no-group "
+            f"{RECORDER_SRC}/ {RECORDER_DST}/",
+            timeout=1800.0,
         )
         if not ok:
-            logger.error("Failed to move recorder: %s", err)
-            _status = MigrationStatus(MigrationState.ERROR, error=f"Move failed: {err}")
+            logger.error("rsync failed: %s", err)
+            _status = MigrationStatus(MigrationState.ERROR, error=f"Copy failed: {err}")
+            return
+
+        # Remove original directory so we can replace it with a symlink
+        ok, err = await _run_host_command(
+            f"sudo rm -rf {RECORDER_SRC}",
+            timeout=120.0,
+        )
+        if not ok:
+            logger.error("Failed to remove source: %s", err)
+            _status = MigrationStatus(MigrationState.ERROR, error=f"Remove source failed: {err}")
             return
     else:
         ok, _ = await _run_host_command(f"sudo mkdir -p {RECORDER_DST}")
@@ -139,6 +187,7 @@ async def _do_setup() -> None:
             _status = MigrationStatus(MigrationState.ERROR, error=f"Failed to create {RECORDER_DST}")
             return
 
+    # ── Symlink ──────────────────────────────────────────────────────
     _status = MigrationStatus(MigrationState.LINKING, "Creating symlink")
 
     ok, err = await _run_host_command(f"sudo ln -sf {RECORDER_DST} {RECORDER_SRC}")
