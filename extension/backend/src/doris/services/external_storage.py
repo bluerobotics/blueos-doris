@@ -114,6 +114,18 @@ async def _do_setup() -> None:
 
     _status = MigrationStatus(MigrationState.CHECKING, "Checking for external storage device")
 
+    # ── Fix dangling symlink ─────────────────────────────────────────
+    # If the drive was migrated previously but then removed, the
+    # symlink still exists yet points to nothing. Restore the
+    # directory so the recorder can keep writing to the SD card.
+    ok, _ = await _run_host_command(
+        f"test -L {RECORDER_SRC} && ! test -e {RECORDER_SRC}"
+    )
+    if ok:
+        logger.warning("Dangling symlink at %s, restoring directory", RECORDER_SRC)
+        await _run_host_command(f"sudo rm -f {RECORDER_SRC}")
+        await _run_host_command(f"sudo mkdir -p {RECORDER_SRC}")
+
     ok, _ = await _run_host_command(f"test -b {DISK}")
     if not ok:
         logger.info("%s not found, skipping external storage setup", DISK)
