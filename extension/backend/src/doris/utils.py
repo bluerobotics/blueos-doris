@@ -68,6 +68,29 @@ async def restart_firmware(logger: logging.Logger) -> None:
         logger.warning("Failed to restart firmware: %s", e)
 
 
+def disable_usb_autosuspend(logger: logging.Logger) -> None:
+    """Set power/control to 'on' for all USB devices to prevent autosuspend."""
+    usb_devices = Path("/sys/bus/usb/devices")
+    if not usb_devices.is_dir():
+        logger.info("USB sysfs not available, skipping autosuspend disable")
+        return
+
+    count = 0
+    for device in usb_devices.iterdir():
+        control = device / "power" / "control"
+        if not control.is_file():
+            continue
+        try:
+            current = control.read_text().strip()
+            if current != "on":
+                control.write_text("on")
+                count += 1
+        except OSError:
+            pass
+
+    logger.info("Disabled USB autosuspend on %d device(s)", count)
+
+
 def deploy_artemis_svl(logger: logging.Logger) -> None:
     """Copy artemis_svl.py to /usr/bin if permissions allow."""
     src: Path | None = None

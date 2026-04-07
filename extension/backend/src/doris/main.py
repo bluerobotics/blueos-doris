@@ -23,7 +23,7 @@ from .routes import (
 )
 from .services.external_storage import start_external_storage_setup
 from .services.mdns import setup_doris_local
-from .utils import deploy_artemis_svl, deploy_lua_scripts, restart_firmware
+from .utils import deploy_artemis_svl, deploy_lua_scripts, disable_usb_autosuspend, restart_firmware
 
 
 def create_app() -> Robyn:
@@ -71,6 +71,8 @@ def create_app() -> Robyn:
 
     @app.startup_handler
     async def on_startup():
+        disable_usb_autosuspend(logger)
+
         lua_deployed = deploy_lua_scripts(logger)
         deploy_artemis_svl(logger)
 
