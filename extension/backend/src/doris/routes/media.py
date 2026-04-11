@@ -22,7 +22,7 @@ def register_media_routes(app: Robyn) -> None:
             raw_mission_id = request.query_params.get("mission_id", None)
             mission_id = unquote(raw_mission_id) if raw_mission_id else None
             media_type_str = request.query_params.get("type", None)
-            limit = int(request.query_params.get("limit", "50"))
+            limit = int(request.query_params.get("limit", "0"))
             offset = int(request.query_params.get("offset", "0"))
 
             media_type = None
