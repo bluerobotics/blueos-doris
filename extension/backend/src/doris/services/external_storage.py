@@ -1,15 +1,20 @@
 """DORIS external storage setup.
 
 On startup, checks if /dev/sda exists on the host. If it does:
-  1. Finds the first partition (e.g. /dev/sda1) via lsblk
-  2. Mounts the partition to /mnt
-  3. Copies recorder data to /mnt/recorder using rsync
-  4. Creates a symlink from the old path to the new location
+  1. Finds the first partition and its UUID via lsblk/blkid
+  2. Mounts the partition to /mnt (if not already mounted)
+  3. Adds persistent fstab entries for the device mount and a bind
+     mount that overlays /usr/blueos/userdata/recorder
+  4. Activates the bind mount so the current session works immediately
 
-This offloads recording data to an external USB drive.
-All operations run on the host via the Commander API.
+On subsequent boots the fstab entries handle everything before Docker
+starts, so the container sees the external drive content transparently.
 
-The migration runs as a background task so it doesn't block startup.
+If the recorder directory is a broken symlink (left over from the
+previous symlink-based approach), it is repaired directly inside the
+container via the bind-mounted userdata directory.
+
+All host commands run via the Commander API.
 Frontend polls ``get_migration_status()`` to show progress.
 """
 
@@ -19,6 +24,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 import httpx
 
@@ -28,16 +34,17 @@ logger = logging.getLogger(__name__)
 
 DISK = "/dev/sda"
 MOUNT_POINT = "/mnt"
-RECORDER_SRC = "/usr/blueos/userdata/recorder"
-RECORDER_DST = "/mnt/recorder"
+FSTAB = "/etc/fstab"
+
+RECORDER_HOST_DIR = "/usr/blueos/userdata/recorder"
+RECORDER_CONTAINER_PATH = Path("/tmp/storage/userdata/recorder")
 
 
 class MigrationState(StrEnum):
     IDLE = "idle"
     CHECKING = "checking"
     MOUNTING = "mounting"
-    MIGRATING = "migrating"
-    LINKING = "linking"
+    CONFIGURING = "configuring"
     DONE = "done"
     SKIPPED = "skipped"
     ERROR = "error"
@@ -94,7 +101,6 @@ async def _find_partition() -> str | None:
     if ok and out:
         return out.strip()
 
-    # No partition table — check if the disk itself has a filesystem
     ok, out = await _run_host_command(
         f"lsblk -lnpo FSTYPE {DISK} 2>/dev/null | head -1"
     )
@@ -104,27 +110,96 @@ async def _find_partition() -> str | None:
     return None
 
 
-async def _do_setup() -> None:
-    """Mount external drive and relocate the recorder directory to it.
+async def _get_partition_info(partition: str) -> tuple[str | None, str | None]:
+    """Return (UUID, fstype) for a partition via blkid."""
+    ok, out = await _run_host_command(
+        f"sudo blkid -s UUID -o value {partition}"
+    )
+    uuid = out.strip() if ok and out.strip() else None
 
-    Idempotent — skips steps that are already done.
+    ok, out = await _run_host_command(
+        f"sudo blkid -s TYPE -o value {partition}"
+    )
+    fstype = out.strip() if ok and out.strip() else None
+
+    return uuid, fstype
+
+
+def _fix_broken_recorder_symlink() -> bool:
+    """If the recorder path inside the container is a broken symlink, fix it.
+
+    Returns True if a fix was applied.
+    """
+    p = RECORDER_CONTAINER_PATH
+    if p.is_symlink() and not p.exists():
+        logger.warning("Broken symlink at %s, replacing with directory", p)
+        p.unlink()
+        p.mkdir(parents=True, exist_ok=True)
+        return True
+    if not p.exists():
+        p.mkdir(parents=True, exist_ok=True)
+    return False
+
+
+async def _add_fstab_entries(uuid: str, fstype: str) -> tuple[bool, str]:
+    """Add device mount and bind mount entries to /etc/fstab (idempotent).
+
+    Backs up fstab before writing, then verifies with ``mount -a --fake``.
+    On verification failure the backup is restored.
+    """
+    device_entry = f"UUID={uuid} {MOUNT_POINT} {fstype} defaults,nofail 0 2"
+    bind_entry = (
+        f"{MOUNT_POINT}/recorder {RECORDER_HOST_DIR} none "
+        f"bind,nofail,x-systemd.requires-mounts-for={MOUNT_POINT} 0 0"
+    )
+
+    ok, current_fstab = await _run_host_command(f"cat {FSTAB}")
+    if not ok:
+        return False, f"Failed to read {FSTAB}"
+
+    lines_to_add: list[str] = []
+    if f"UUID={uuid}" not in current_fstab:
+        lines_to_add.append(device_entry)
+    if f"{MOUNT_POINT}/recorder" not in current_fstab:
+        lines_to_add.append(bind_entry)
+
+    if not lines_to_add:
+        logger.info("fstab entries already present")
+        return True, "already configured"
+
+    ok, err = await _run_host_command(f"sudo cp {FSTAB} {FSTAB}.doris.bak")
+    if not ok:
+        return False, f"Failed to backup fstab: {err}"
+
+    append_text = "\\n".join(lines_to_add)
+    ok, err = await _run_host_command(
+        f"printf '\\n{append_text}\\n' | sudo tee -a {FSTAB} > /dev/null"
+    )
+    if not ok:
+        await _run_host_command(f"sudo cp {FSTAB}.doris.bak {FSTAB}")
+        return False, f"Failed to write fstab: {err}"
+
+    ok, err = await _run_host_command("sudo mount -a --fake --verbose")
+    if not ok:
+        logger.error("fstab verification failed, restoring backup: %s", err)
+        await _run_host_command(f"sudo cp {FSTAB}.doris.bak {FSTAB}")
+        return False, f"fstab verification failed: {err}"
+
+    logger.info("fstab entries added and verified")
+    return True, "configured"
+
+
+async def _do_setup() -> None:
+    """Mount external drive and configure fstab for persistent bind mount.
+
+    Idempotent -- skips steps that are already done.
     Updates ``_status`` at each stage so the frontend can report progress.
     """
     global _status
 
     _status = MigrationStatus(MigrationState.CHECKING, "Checking for external storage device")
 
-    # ── Fix dangling symlink ─────────────────────────────────────────
-    # If the drive was migrated previously but then removed, the
-    # symlink still exists yet points to nothing. Restore the
-    # directory so the recorder can keep writing to the SD card.
-    ok, _ = await _run_host_command(
-        f"test -L {RECORDER_SRC} && ! test -e {RECORDER_SRC}"
-    )
-    if ok:
-        logger.warning("Dangling symlink at %s, restoring directory", RECORDER_SRC)
-        await _run_host_command(f"sudo rm -f {RECORDER_SRC}")
-        await _run_host_command(f"sudo mkdir -p {RECORDER_SRC}")
+    _fix_broken_recorder_symlink()
 
     ok, _ = await _run_host_command(f"test -b {DISK}")
     if not ok:
@@ -140,6 +215,14 @@ async def _do_setup() -> None:
 
     logger.info("Using partition %s", partition)
 
+    uuid, fstype = await _get_partition_info(partition)
+    if not uuid or not fstype:
+        logger.error("Could not determine UUID/fstype for %s", partition)
+        _status = MigrationStatus(MigrationState.ERROR, error=f"Cannot identify {partition}")
+        return
+
+    logger.info("Partition %s: UUID=%s fstype=%s", partition, uuid, fstype)
+
     # ── Mount ────────────────────────────────────────────────────────
     _status = MigrationStatus(MigrationState.MOUNTING, f"Mounting {partition}")
 
@@ -154,62 +237,34 @@ async def _do_setup() -> None:
     else:
         logger.info("%s already mounted", MOUNT_POINT)
 
-    # ── Already done? ────────────────────────────────────────────────
-    ok, _ = await _run_host_command(f"test -L {RECORDER_SRC}")
-    if ok:
-        logger.info("%s is already a symlink, nothing to do", RECORDER_SRC)
-        _status = MigrationStatus(MigrationState.DONE, "Already migrated")
-        return
-
-    # ── Copy data ────────────────────────────────────────────────────
-    ok, _ = await _run_host_command(f"test -d {RECORDER_SRC}")
-    if ok:
-        _status = MigrationStatus(
-            MigrationState.MIGRATING,
-            "Copying recorder data to external drive — this may take several minutes",
-        )
-        # rsync is preferred over mv:
-        #  - works across filesystems (ext4 → ntfs)
-        #  - doesn't fail on permission/ownership differences
-        #  - handles a pre-existing destination directory correctly
-        logger.info("Syncing %s → %s", RECORDER_SRC, RECORDER_DST)
-        ok, err = await _run_host_command(
-            f"sudo rsync -a --no-perms --no-owner --no-group "
-            f"{RECORDER_SRC}/ {RECORDER_DST}/",
-            timeout=1800.0,
-        )
-        if not ok:
-            logger.error("rsync failed: %s", err)
-            _status = MigrationStatus(MigrationState.ERROR, error=f"Copy failed: {err}")
-            return
-
-        # Remove original directory so we can replace it with a symlink
-        ok, err = await _run_host_command(
-            f"sudo rm -rf {RECORDER_SRC}",
-            timeout=120.0,
-        )
-        if not ok:
-            logger.error("Failed to remove source: %s", err)
-            _status = MigrationStatus(MigrationState.ERROR, error=f"Remove source failed: {err}")
-            return
-    else:
-        ok, _ = await _run_host_command(f"sudo mkdir -p {RECORDER_DST}")
-        if not ok:
-            logger.error("Failed to create %s", RECORDER_DST)
-            _status = MigrationStatus(MigrationState.ERROR, error=f"Failed to create {RECORDER_DST}")
-            return
-
-    # ── Symlink ──────────────────────────────────────────────────────
-    _status = MigrationStatus(MigrationState.LINKING, "Creating symlink")
-
-    ok, err = await _run_host_command(f"sudo ln -sf {RECORDER_DST} {RECORDER_SRC}")
+    ok, err = await _run_host_command(f"sudo mkdir -p {MOUNT_POINT}/recorder")
     if not ok:
-        logger.error("Failed to create symlink: %s", err)
-        _status = MigrationStatus(MigrationState.ERROR, error=f"Symlink failed: {err}")
+        logger.error("Failed to create recorder dir on drive: %s", err)
+        _status = MigrationStatus(MigrationState.ERROR, error=f"mkdir failed: {err}")
         return
 
-    logger.info("External storage ready: %s → %s", RECORDER_SRC, RECORDER_DST)
-    _status = MigrationStatus(MigrationState.DONE, "Recorder data migrated to external drive")
+    # ── Configure fstab ──────────────────────────────────────────────
+    _status = MigrationStatus(MigrationState.CONFIGURING, "Configuring persistent mount")
+
+    ok, err = await _add_fstab_entries(uuid, fstype)
+    if not ok:
+        _status = MigrationStatus(MigrationState.ERROR, error=err)
+        return
+
+    # ── Activate bind mount ──────────────────────────────────────────
+    ok, _ = await _run_host_command(f"mountpoint -q {RECORDER_HOST_DIR}")
+    if not ok:
+        logger.info("Activating bind mount: %s/recorder -> %s", MOUNT_POINT, RECORDER_HOST_DIR)
+        ok, err = await _run_host_command(
+            f"sudo mount --bind {MOUNT_POINT}/recorder {RECORDER_HOST_DIR}"
+        )
+        if not ok:
+            logger.warning("Bind mount activation failed: %s (will take effect on reboot)", err)
+    else:
+        logger.info("Bind mount already active at %s", RECORDER_HOST_DIR)
+
+    logger.info("External storage configured: %s -> %s", RECORDER_HOST_DIR, MOUNT_POINT)
+    _status = MigrationStatus(MigrationState.DONE, "External storage configured")
 
 
 async def _run_setup_safe() -> None:
@@ -223,6 +278,6 @@ async def _run_setup_safe() -> None:
 
 
 def start_external_storage_setup() -> None:
-    """Launch the storage migration as a fire-and-forget background task."""
+    """Launch the storage setup as a fire-and-forget background task."""
     global _task
     _task = asyncio.ensure_future(_run_setup_safe())
