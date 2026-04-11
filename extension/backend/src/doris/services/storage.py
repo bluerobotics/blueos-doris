@@ -40,16 +40,28 @@ def _detect_media_type(filename: str) -> MediaType:
 
 
 def _file_to_media(path: Path, root: Path) -> MediaFile:
-    """Convert a filesystem path to a MediaFile model."""
+    """Convert a filesystem path to a MediaFile model.
+
+    Files inside a subdirectory use the subdirectory name as the mission_id.
+    Root-level files whose stem matches a subdirectory (e.g.
+    ``recorder_20260411.mcap`` alongside ``recorder_20260411/``) are also
+    associated with that mission.
+    """
     stat = path.stat()
     rel = path.relative_to(root)
+    if len(rel.parts) > 1:
+        mission_id = rel.parts[0]
+    elif (root / path.stem).is_dir():
+        mission_id = path.stem
+    else:
+        mission_id = None
     return MediaFile(
         id=str(rel),
         filename=path.name,
         media_type=_detect_media_type(path.name),
         size_bytes=stat.st_size,
         created_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-        mission_id=rel.parts[0] if len(rel.parts) > 1 else None,
+        mission_id=mission_id,
         download_url=f"/api/v1/media/download/{rel}",
     )
 
@@ -75,10 +87,13 @@ class StorageService:
         self,
         mission_id: str | None = None,
         media_type: MediaType | None = None,
-        limit: int = 50,
+        limit: int = 0,
         offset: int = 0,
     ) -> list[MediaFile]:
-        """List media files from the recorder directory."""
+        """List media files from the recorder directory.
+
+        A *limit* of ``0`` (the default) returns all files.
+        """
         try:
             search_root = self.media_root / mission_id if mission_id else self.media_root
             if not search_root.exists():
@@ -101,14 +116,21 @@ class StorageService:
 
             files.sort(key=lambda f: f.created_at, reverse=True)
 
-            return files[offset : offset + limit]
+            if limit > 0:
+                return files[offset : offset + limit]
+            return files[offset:] if offset else files
 
         except Exception as e:
             logger.warning(f"Failed to scan media files: {e}")
             raise
 
     async def get_missions_with_media(self) -> list[MediaMission]:
-        """Discover missions by scanning top-level subdirectories of the recorder."""
+        """Discover missions by scanning top-level subdirectories of the recorder.
+
+        Root-level files whose stem matches a subdirectory (e.g.
+        ``recorder_20260411.mcap`` next to ``recorder_20260411/``) are
+        counted as part of that mission.
+        """
         try:
             if not self.media_root.exists():
                 return []
@@ -133,6 +155,27 @@ class StorageService:
                         total_size += stat.st_size
                         latest_mtime = max(latest_mtime, stat.st_mtime)
                         mt = _detect_media_type(path.name)
+                        if mt == MediaType.IMAGE:
+                            images += 1
+                        elif mt == MediaType.VIDEO:
+                            videos += 1
+                        else:
+                            data_files += 1
+                    except (FileNotFoundError, PermissionError):
+                        continue
+
+                # Include root-level files whose stem matches this directory
+                for sibling in self.media_root.iterdir():
+                    try:
+                        if not sibling.is_file() or sibling.stem != entry.name:
+                            continue
+                        ext = sibling.suffix.lstrip(".").lower()
+                        if ext not in ALL_EXTENSIONS:
+                            continue
+                        stat = sibling.stat()
+                        total_size += stat.st_size
+                        latest_mtime = max(latest_mtime, stat.st_mtime)
+                        mt = _detect_media_type(sibling.name)
                         if mt == MediaType.IMAGE:
                             images += 1
                         elif mt == MediaType.VIDEO:
