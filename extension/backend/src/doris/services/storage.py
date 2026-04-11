@@ -27,6 +27,7 @@ DATA_EXTENSIONS = frozenset(("csv", "json", "bin", "log", "txt", "bag", "mcap", 
 ALL_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | DATA_EXTENSIONS
 
 DATA_ROOT = Path(os.environ.get("DORIS_DATA_ROOT", "/tmp/storage"))
+RECORDER_ROOT = Path(os.environ.get("DORIS_RECORDER_ROOT", "/tmp/storage/userdata/recorder"))
 
 
 def _detect_media_type(filename: str) -> MediaType:
@@ -54,12 +55,21 @@ def _file_to_media(path: Path, root: Path) -> MediaFile:
 
 
 class StorageService:
-    """Service for managing stored media files on the local filesystem."""
+    """Service for managing stored media files on the local filesystem.
 
-    def __init__(self, root: Path | None = None):
+    Uses separate roots for media (recorder data) and configuration storage.
+    ``media_root`` defaults to ``RECORDER_ROOT`` (the BlueOS recorder directory
+    bind-mounted from the host).  ``root`` is the broader ``DATA_ROOT`` used
+    for configurations and other extension data.
+    """
+
+    def __init__(self, root: Path | None = None, media_root: Path | None = None):
         self.root = root or DATA_ROOT
+        self.media_root = media_root or RECORDER_ROOT
         if not self.root.exists():
             self.root.mkdir(parents=True, exist_ok=True)
+        if not self.media_root.exists():
+            self.media_root.mkdir(parents=True, exist_ok=True)
 
     async def get_media_files(
         self,
@@ -68,9 +78,9 @@ class StorageService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[MediaFile]:
-        """List media files from the local data directory."""
+        """List media files from the recorder directory."""
         try:
-            search_root = self.root / mission_id if mission_id else self.root
+            search_root = self.media_root / mission_id if mission_id else self.media_root
             if not search_root.exists():
                 return []
 
@@ -82,7 +92,7 @@ class StorageService:
                     ext = path.suffix.lstrip(".").lower()
                     if ext not in ALL_EXTENSIONS:
                         continue
-                    mf = _file_to_media(path, self.root)
+                    mf = _file_to_media(path, self.media_root)
                     if media_type and mf.media_type != media_type:
                         continue
                     files.append(mf)
@@ -98,13 +108,13 @@ class StorageService:
             raise
 
     async def get_missions_with_media(self) -> list[MediaMission]:
-        """Discover missions by scanning top-level subdirectories."""
+        """Discover missions by scanning top-level subdirectories of the recorder."""
         try:
-            if not self.root.exists():
+            if not self.media_root.exists():
                 return []
 
             missions: list[MediaMission] = []
-            for entry in sorted(self.root.iterdir(), reverse=True):
+            for entry in sorted(self.media_root.iterdir(), reverse=True):
                 if not entry.is_dir():
                     continue
 
@@ -154,10 +164,10 @@ class StorageService:
             raise
 
     async def get_file(self, file_path: str) -> bytes | None:
-        """Read a file from disk."""
+        """Read a media file from the recorder directory."""
         try:
-            full = self.root / file_path
-            if not full.is_file() or not full.resolve().is_relative_to(self.root.resolve()):
+            full = self.media_root / file_path
+            if not full.is_file() or not full.resolve().is_relative_to(self.media_root.resolve()):
                 return None
             return full.read_bytes()
         except Exception as e:
@@ -165,10 +175,10 @@ class StorageService:
             return None
 
     async def delete_file(self, file_path: str) -> bool:
-        """Delete a file from disk."""
+        """Delete a media file from the recorder directory."""
         try:
-            full = self.root / file_path
-            if not full.resolve().is_relative_to(self.root.resolve()):
+            full = self.media_root / file_path
+            if not full.resolve().is_relative_to(self.media_root.resolve()):
                 raise ValueError("Path traversal denied")
             full.unlink(missing_ok=True)
             return True
